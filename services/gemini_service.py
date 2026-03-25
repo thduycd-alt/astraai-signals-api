@@ -50,10 +50,20 @@ Dựa vào data thô ở trên, bạn phải tự tay VIẾT LỜI BÌNH CHUYÊN
         
         try:
             response = self.model.generate_content(prompt)
-            result_text = response.text.strip().replace("```json", "").replace("```", "")
-            result_json = json.loads(result_text)
-            result_json["disclaimer"] = "Báo cáo Tự động tạo bởi Gemini 2.5 Flash AI kết hợp AstraAI V3 Enterprise Algorithms."
-            return result_json
+            # Lọc bớt block text ```json
+            result_text = response.text.strip()
+            import re
+            
+            # Tương thích với việc Model hay nói nhiều "Dạ phần tích đây ạ: { ... }"
+            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            if json_match:
+                clean_json = json_match.group(0)
+                result_json = json.loads(clean_json)
+                result_json["disclaimer"] = "Báo cáo Tự động tạo bởi Gemini 2.5 Flash AI kết hợp AstraAI V3 Enterprise Algorithms."
+                return result_json
+            else:
+                print("Gemini Output Not Found JSON Data")
+                return {}
         except Exception as e:
             print(f"Gemini API Error: {e}")
             return {}
