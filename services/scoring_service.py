@@ -60,25 +60,26 @@ class ScoringService:
             }
 
             # ==============================================================
-            # BƯỚC 3: GỌI SIÊU CHUYÊN GIA GEMINI 2.5 FLASH (NẾU CÓ API KEY)
+            # BƯỚC 3: GỌI SIÊU CHUYÊN GIA GEMINI 2.5 FLASH (V3 ENTERPRISE)
             # ==============================================================
             if gemini_service.model is not None:
-                # Đóng gói dữ liệu tóm lược ném cho Gemini đọc
-                compact_data = {
-                    "MACD_RSI_Tech": layers_data.get("technical", {}).get("score", 50),
-                    "SmartMoney_Vol": layers_data.get("smart_money", {}).get("score", 50),
-                    "Fundamental_PE": layers_data.get("fundamental", {}).get("score", 50),
-                    "Macro": layers_data.get("macro", {}).get("score", 50),
-                    "Intraday_5m": layers_data.get("intraday", {}).get("score", 50),
-                    "Shark_Net_Volume_Last_15_Days": layers_data.get("smart_money", {}).get("volume_analysis", {}).get("net_shark_vol", 0)
-                }
-                gemini_result = gemini_service.synthesize_analysis(symbol, compact_data)
+                # V3: Gửi Toàn bộ Bể Dữ liệu Thô (Khối ngoại, Lệnh, PE, Vĩ mô) cho Gemini tự luận giải
+                gemini_result = gemini_service.synthesize_analysis(symbol, layers_data)
                 
-                # Trộn Điểm Mặc Định với Nhận Định Gemini
+                # Trộn Nhận Định Tổng Quan Chốt Hạ
                 final_payload["recommendation"] = gemini_result.get("recommendation", recommendation)
-                final_payload["final_score"] = float(gemini_result.get("final_score", final_score))
+                # KIỂM SOÁT QUYỀN LỰC AI: Đóng băng Điểm Toán Học, Không cho AI (Gemini) ghi đè để bảo vệ tính công bằng
+                # final_payload["final_score"] = float(gemini_result.get("final_score", final_score))
                 final_payload["action"] = gemini_result.get("action", action)
                 final_payload["disclaimer"] = gemini_result.get("disclaimer", final_payload["disclaimer"])
+
+                # Cập nhật Trực tiếp Text 6 Tầng Bằng Tiếng Việt Đậm Chất Chuyên Gia của Gemini
+                if "tech_text" in gemini_result: layers_data.get("technical", {})["expert_text"] = gemini_result["tech_text"]
+                if "sm_text" in gemini_result: layers_data.get("smart_money", {})["expert_text"] = gemini_result["sm_text"]
+                if "fundamental_text" in gemini_result: layers_data.get("fundamental", {})["expert_text"] = gemini_result["fundamental_text"]
+                if "macro_text" in gemini_result: layers_data.get("macro", {})["expert_text"] = gemini_result["macro_text"]
+                if "news_text" in gemini_result: layers_data.get("news_rumor", {})["expert_text"] = gemini_result["news_text"]
+                if "intraday_text" in gemini_result: layers_data.get("intraday", {})["expert_text"] = gemini_result["intraday_text"]
 
             return final_payload
             

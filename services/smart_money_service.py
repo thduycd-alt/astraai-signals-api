@@ -50,20 +50,43 @@ class SmartMoneyService:
                 if vol_multiplier >= 3.0:  # Gấp 3 lần trung bình 20 ngày
                     vol_anomaly = True
 
+            # 4. Tính toán Khối lượng Cá mập Gom/Xả ròng trong 15 phiên gần nhất
+            df_recent = df.tail(15)
+            shark_buy_vol = 0
+            shark_sell_vol = 0
+            
+            for index, row in df_recent.iterrows():
+                vol = row['volume']
+                sma = row.get('VOL_SMA_20', vol)
+                # Dấu chân cá mập: Khối lượng lớn hơn 1.25 lần trung bình là bắt đầu có tay to
+                if sma > 0 and vol >= sma * 1.25: 
+                    if row['close'] > row['open']:
+                        shark_buy_vol += vol
+                    else:
+                        shark_sell_vol += vol
+            
+            net_shark_vol = float(shark_buy_vol - shark_sell_vol)
+
             # Hệ thống chấm điểm Smart Money (0-100)
             score = 50
-            if obv_trend == "Accumulation (Mua Gom)": score += 15
-            else: score -= 15
+            if obv_trend == "Accumulation (Mua Gom)": score += 10
+            else: score -= 10
             
-            if cmf > 0.1: score += 20
-            elif cmf < -0.1: score -= 20
+            if cmf > 0.1: score += 15
+            elif cmf < -0.1: score -= 15
             
-            # Nếu có khối lượng đột biến (dấu tay To tham gia)
+            # Yếu tố Khối lượng ròng quyết định xu hướng tay to
+            if net_shark_vol > 0:
+                score += 15
+            elif net_shark_vol < 0:
+                score -= 15
+
+            # Nếu có khối lượng đột biến phiên nay (dấu tay To tham gia Tức thời)
             if vol_anomaly:
                 if latest['close'] > latest['open']:
-                    score += 15 # Đột biến khối lượng + nến tăng (Sóng đẩy/Breakout)
+                    score += 10 # Đột biến khối lượng + nến tăng
                 else:
-                    score -= 15 # Đột biến khối lượng + nến giảm (Phân phối đỉnh/Washout)
+                    score -= 10 # Đột biến khối lượng + nến giảm
 
             return {
                 "score": max(0, min(100, score)),
@@ -74,7 +97,8 @@ class SmartMoneyService:
                 },
                 "volume_analysis": {
                     "vol_multiplier": round(vol_multiplier, 2),
-                    "is_anomaly_3x": vol_anomaly
+                    "is_anomaly_3x": vol_anomaly,
+                    "net_shark_vol": net_shark_vol
                 }
             }
 
