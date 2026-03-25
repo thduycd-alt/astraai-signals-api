@@ -1,74 +1,68 @@
+import requests
+from bs4 import BeautifulSoup
+
 class NewsRumorService:
     """
     Layer 5: Tin tức, Rumor & Lập trường KOL (Trọng số 15%)
-    Sử dụng Web Crawler (Cafef, F319) và Mạng lưới KOL.
-    Đẩy qua NLP PhoBERT để tính Sentiment (-15 đến +15)
+    Dùng Web Scraper chọc vào HTML của CafeF để đọc thẳng 5 tin mới nhất của Cổ phiếu.
     """
-    
-    # Danh sách VIP KOL & Lãnh đạo cộm cán (Hệ thống tự học và Tracking phát ngôn/hành vi)
-    # Admin/User có thể cấu hình và bổ sung thêm trực tiếp từ App Mobile.
-    DEFAULT_KOLS = [
-        "Trường Money", "A7", "Tuấn mượt", 
-        "Phạm Nhật Vượng", "Bầu Thụy", "Bầu Đức"
-    ]
 
     @staticmethod
     def analyze(symbol: str, custom_kols: list = None) -> dict:
         try:
-            kols_to_track = custom_kols if custom_kols else NewsRumorService.DEFAULT_KOLS
+            headlines = []
+            sentiment_score = 50
             
-            # 1. Blueprint Scraping Tin tức Đại chúng & F319
-            # requests.get(f"https://cafef.vn/tim-kiem.chn?keyword={symbol}")
+            # --- 1. BẮT ĐẦU CÀO DỮ LIỆU TỪ CAFEF ---
+            # Sử dụng API chìm của CafeF trả về HTML list tin tức
+            url = f"https://s.cafef.vn/Ajax/Events_RelatedNews_New.aspx?symbol={symbol}&startIndex=0&pageSize=5"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
             
-            # 2. Tracking Hành vi KOL (AI Learning Blueprint)
-            # Hệ thống NLP sẽ quét các Post Text, Video Transcript liên quan đến KOLS_TO_TRACK
+            response = requests.get(url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Trích xuất tiêu đề (nằm trong the <a> có class 'docnhanhTitle')
+                links = soup.find_all('a', class_='docnhanhTitle')
+                for link in links:
+                    title = link.text.strip()
+                    if title:
+                        headlines.append(title)
             
-            # ĐĂC QUYỀN: Xử lý Lập trường KOL & Nhóm lợi ích
-            mock_kol_stance = []
-            kol_bonus_score = 0
+            if not headlines:
+                headlines = [f"Chưa có tin tức nổi bật nào về {symbol} trên diện rộng."]
             
-            # Nhận diện hệ sinh thái: Tính năng liên kết Cổ Phiếu với Hành vi KOL (MVP Mock)
-            if symbol in ["VIC", "VHM", "VRE"]:
-                mock_kol_stance.append("Phạm Nhật Vượng: Chiến lược dồn lực cho VinFast và tái cấu trúc huy động vốn ngoại.")
-                kol_bonus_score += 5
-            elif symbol in ["DIG", "CEO", "L14"]:
-                mock_kol_stance.append("Hệ A7 (Rumor): Đang có sóng kích cầu dư luận từ các Room VIP, kêu gào chu kỳ đất nền.")
-                kol_bonus_score += 10
-            elif symbol in ["LPB", "THD"]:
-                mock_kol_stance.append("Bầu Thụy: Động thái thâu tóm và gom ròng đỡ giá cổ phiếu ngân hàng lộ rỏ qua lệnh block trades.")
-                kol_bonus_score += 15  # Đỉnh cao cá mập
-            elif symbol in ["GEX", "VIX", "EIB"]:
-                mock_kol_stance.append("Tuấn Mượt: Có lịch sử đánh rát tay. Hiện tại đang xả hàng kéo xanh giả mạo, chú ý rủi ro phân phối đỉnh.")
-                kol_bonus_score -= 15 # Trừ điểm kịch khung
-            elif symbol in ["HAG", "HNG"]:
-                mock_kol_stance.append("Bầu Đức: Phát ngôn dồn dập về trả nợ trái phiếu và bán mảng heo. Sự tự tin của Chủ tịch đang lên cao.")
-                kol_bonus_score += 8
+            # --- 2. THUẬT TOÁN CHẤM ĐIỂM (NLP ĐƠN GIẢN) ---
+            # Tạo bộ từ khóa để quét cảm xúc tiêu đề
+            positive_words = ['lãi', 'tăng', 'khủng', 'vượt', 'hợp tác', 'ký kết', 'cổ tức', 'chấp thuận', 'khởi sắc', 'kỷ lục']
+            negative_words = ['lỗ', 'giảm', 'bán', 'tháo', 'bắt', 'khởi tố', 'hủy', 'đỉnh', 'cảnh báo', 'rủi ro', 'lao dốc']
             
-            # API Mock Output Tin tức chung
-            mock_headlines = [
-                f"Room VIP phím hàng {symbol} với target rất cao",
-                f"{symbol} chuẩn bị công bố thông tin quan trọng"
-            ]
+            pos_count = 0
+            neg_count = 0
             
-            # 3. Chấm điểm Cảm xúc của PhoBERT (Scale: -15 to +15)
-            phobert_raw_score = 8  # Tích cực nhẹ
+            for hl in headlines:
+                text_lower = hl.lower()
+                for w in positive_words:
+                    if w in text_lower: pos_count += 1
+                for w in negative_words:
+                    if w in text_lower: neg_count += 1
             
-            # TỔNG HỢP LAYER 5: Base (50) + Điểm Tin tức (PhoBERT x 1.5) + Điểm KOL
-            score = 50 + (phobert_raw_score * 1.5) + kol_bonus_score
+            bias = (pos_count - neg_count) * 10
+            sentiment_score = max(0, min(100, 50 + bias))
 
             return {
-                "score": max(0, min(100, score)),
-                "phobert_sentiment_raw": phobert_raw_score,
-                "latest_headlines": mock_headlines,
-                "kol_stances": mock_kol_stance,
-                "tracked_kols_active": len(kols_to_track),
-                "tracked_kols_list": kols_to_track,
-                "status": "Bullish Rumors & KOL Hỗ trợ kéo giá" if score > 60 else 
-                         ("Bearish (KOL đang xả hàng lên đầu nhỏ lẻ)" if score < 40 else "Neutral")
+                "score": sentiment_score,
+                "latest_headlines": headlines,
+                "status": "Tích cực (Tin Tốt Tràn Ngập)" if sentiment_score > 60 else ("Tiêu cực (Ngập lụt tin FUD)" if sentiment_score < 40 else "Trung Lập")
             }
             
         except Exception as e:
-            print(f"News/Rumor/KOL Analysis Error: {e}")
-            return {"error": str(e), "score": 50}
+            print(f"News Scraper Error: {e}")
+            return {
+                "score": 50,
+                "latest_headlines": ["Lỗi kết nối tới Máy chủ lấy tin CafeF."],
+                "status": "Lỗi cào dữ liệu",
+                "error": str(e)
+            }
 
 news_rumor_service = NewsRumorService()
