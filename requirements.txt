@@ -13,3 +13,4 @@ celery
 redis
 supabase
 plotly
+google-generativeai
