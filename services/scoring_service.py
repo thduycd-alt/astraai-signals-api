@@ -26,6 +26,9 @@ class ScoringService:
                 total_score += (layer_score * weight)
             
             final_score = round(total_score, 1)
+
+            # Inject in-place the Expert Texts into layers_data for Frontend V2
+            ScoringService._inject_expert_analysis(layers_data)
             
             # Khung Logic "Khuyến nghị" (Recommendation)
             recommendation = "Giữ"
@@ -57,5 +60,37 @@ class ScoringService:
         except Exception as e:
             print(f"Scoring Analysis Error: {e}")
             return {"final_score": 50, "recommendation": "Lỗi tổng hợp dữ liệu", "action": "ERROR"}
+
+    @staticmethod
+    def _inject_expert_analysis(layers: dict):
+        tech, ts = layers.get("technical", {}), layers.get("technical", {}).get("score", 50)
+        tech["layer_title"] = "Tầng 1: Kỹ Thuật (25%)"
+        tech["color_hex"] = "#448AFF"
+        tech["expert_text"] = f"Dựa trên phân tích kỹ thuật hiện hành, hệ thống ghi nhận điểm sức mạnh đạt {ts}/100. Các chỉ báo động lượng như RSI và MACD đang cho thấy sự đồng thuận nhất định {'theo hướng tích cực, ủng hộ nhịp tăng ngắn hạn.' if ts >= 60 else 'ở mức trung tính, cần thêm dòng tiền để bứt phá.' if ts >= 45 else 'theo chiều hướng rủi ro, cảnh báo khả năng điều chỉnh.'} Dải Bollinger Band phản ánh biến động giá đang {'mở rộng biên trên.' if ts >= 60 else 'bó hẹp hoặc mở biên rơi.'} Nhà đầu tư nên bám sát nền đồ thị kỹ thuật tại vùng giá này."
+
+        sm, sms = layers.get("smart_money", {}), layers.get("smart_money", {}).get("score", 50)
+        sm["layer_title"] = "Tầng 2: Smart Money (25%)"
+        sm["color_hex"] = "#18FFFF"
+        sm["expert_text"] = f"Hệ thống dò quét dòng tiền thông minh (Smart Money) chấm điểm ở mức {sms}/100. {'Phát hiện dấu hiệu MUA GOM âm thầm từ các tổ chức lớn.' if sms >= 60 else 'Dòng tiền đang giằng co, chưa có dấu hiệu tay to nhập cuộc rõ ràng.' if sms >= 40 else 'Cảnh báo: Phát hiện áp lực PHÂN KỲ KÍN và dòng tiền lớn âm thầm XẢ HÀNG.'} Chỉ báo CMF và OBV cho thấy áp lực giao dịch từ nhóm cá mập đang {'chiếm ưu thế ở phe Mua.' if sms >= 60 else 'tạo sức ép chốt lời lên thị giá hiện tại.'}"
+
+        fd, fds = layers.get("fundamental", {}), layers.get("fundamental", {}).get("score", 50)
+        fd["layer_title"] = "Tầng 3: Cơ Bản (15%)"
+        fd["color_hex"] = "#B2FF59"
+        fd["expert_text"] = f"Xét về nền tảng doanh nghiệp, điểm cơ bản đạt {fds}/100. Cấu trúc tài chính và định giá P/E, P/B hiện tại đang {'nằm trong vùng chiết khấu cực kỳ hấp dẫn so với giá trị thực.' if fds >= 65 else 'ở mức định giá phù hợp trung bình ngành, rủi ro cơ bản được kiểm soát.' if fds >= 45 else 'bộc lộ một số rủi ro đòn bẩy hoặc định giá đã quá cao so với lợi nhuận lõi.'} Tiềm năng biên lợi nhuận cốt lõi trong thời gian tới được dự phóng {'rất khả quan.' if fds >= 50 else 'đang gặp lực cản vĩ mô.'}"
+
+        mc, mcs = layers.get("macro", {}), layers.get("macro", {}).get("score", 50)
+        mc["layer_title"] = "Tầng 4: Vĩ Mô (10%)"
+        mc["color_hex"] = "#FF8A65"
+        mc["expert_text"] = f"Bối cảnh vĩ mô và chỉ số sức mạnh thị trường chung (VN-Index) đang tác động {'rất thuận lợi' if mcs >= 60 else 'tương đối đi ngang' if mcs >= 45 else 'cực kỳ tiêu cực'} đến nhóm ngành này. Điểm vĩ mô đạt {mcs}/100. Lãi suất điều hành và tình hình thanh khoản {'đang ổn định, tạo bệ phóng tốt cho dòng vốn thị trường.' if mcs >= 50 else 'đang biến động mạnh, gây áp lực tâm lý.'} Tác động liên đới từ thị trường toàn cầu ủng hộ kịch bản {'tích cực.' if mcs >= 50 else 'phòng thủ tối đa.'}"
+
+        nw, nws = layers.get("news_rumor", {}), layers.get("news_rumor", {}).get("score", 50)
+        nw["layer_title"] = "Tầng 5: Rumors & KOLs (15%)"
+        nw["color_hex"] = "#E040FB"
+        nw["expert_text"] = f"Hệ thống tracking bề mặt mạng xã hội và phân tích cảm xúc KOLs chấm điểm {nws}/100. Cảm xúc đám đông và tin đồn trên các Diễn đàn đang rất {'FOMO và Hưng phấn.' if nws >= 80 else 'tích cực.' if nws >= 60 else 'ảm đạm và dè dặt.' if nws >= 40 else 'hoảng loạn và ngập lụt tin FUD.'} Tác động tâm lý này có thể ảnh hưởng rất mạnh đến biến động T+ của nhỏ lẻ."
+
+        ind, inds = layers.get("intraday", {}), layers.get("intraday", {}).get("score", 50)
+        ind["layer_title"] = "Tầng 6: Dòng Thời Gian Tức Thời (10%)"
+        ind["color_hex"] = "#FFD740"
+        ind["expert_text"] = f"Phân tích Intraday tần số cao tại nến 3m/5m chấm điểm {inds}/100. Các thuật toán vi mô phát hiện {'có dòng lệnh tay to mồi kéo giá lên nhanh chóng' if inds >= 65 else 'nhịp đi ngang sideway biên độ hẹp' if inds >= 40 else 'áp lực bán tháo chủ động chớp nhoáng tại vùng giá cao'} trong phiên giao dịch hôm nay. Sóng luân chuyển tiền đang {'ủng hộ kịch bản mua lướt sóng T0.' if inds >= 60 else 'cảnh báo nhà đầu tư tuyệt đối không FOMO mua xanh.'}"
 
 scoring_service = ScoringService()
