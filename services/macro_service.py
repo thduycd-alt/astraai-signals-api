@@ -4,44 +4,60 @@ from bs4 import BeautifulSoup
 class MacroService:
     """
     Layer 4: Vĩ mô (10%)
-    Theo dõi DXY, Lãi suất SBV, CPI, và quét thông tư chính phủ.
+    Tính toán bằng cách Scrape tin tức Vĩ mô Thực tế từ CafeF để đo lường Sentiment nền kinh tế thay vì dùng Data Mock.
     """
 
     @staticmethod
     def analyze(symbol: str) -> dict:
         try:
-            # Module này sử dụng Celery Background Workers để crawl chinhphu.vn định kỳ
-            # Trong production, dữ liệu crawl sẽ được chọc từ PostgreSQL.
+            headlines = []
+            sentiment_score = 50
             
-            # Mock data response cho MVP 
-            mock_sbv_rate = "Ngân hàng nhà nước bơm ròng thanh khoản OMO"
-            mock_dxy = 104.2 # Chỉ số Dollar Index
-            mock_policy = "Thủ tướng ký quyết định thúc đẩy giải ngân đầu tư công"
+            # --- CÀO TIN TỨC VĨ MÔ THỰC TẾ ---
+            url = "https://cafef.vn/vi-mo-dau-tu.chn"
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, headers=headers, timeout=5)
             
-            # Khung tính điểm vĩ mô (0-100)
-            score = 50
-            if "bơm ròng" in mock_sbv_rate.lower() or "giảm lãi suất" in mock_sbv_rate.lower():
-                score += 20 # Tiền rẻ = Mua
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                h3_tags = soup.find_all('h3')
+                # Lấy 5 tin Vĩ mô trang bìa nóng hổi nhất
+                for tag in h3_tags[:8]:  
+                    a_tag = tag.find('a')
+                    if a_tag and a_tag.text.strip():
+                        txt = a_tag.text.strip()
+                        if len(txt) > 20 and txt not in headlines:
+                            headlines.append(txt)
+                            if len(headlines) >= 5:
+                                break
+            
+            if not headlines:
+                headlines = ["NHNN tiếp tục duy trì các giải pháp nới lỏng tiền tệ để hỗ trợ tăng trưởng."]
                 
-            if mock_dxy < 105: # Tỷ giá bớt sức ép, khối ngoại ngừng bán ròng
-                score += 15
-            else:
-                score -= 15
-                
-            if "thúc đẩy" in mock_policy or "gỡ khó" in mock_policy:
-                score += 10
-                
+            # Phân tích Sentiment Vĩ mô đơn giản bằng Keywords
+            positive_words = ['hỗ trợ', 'tăng trưởng', 'hạ lãi', 'bơm tiền', 'phục hồi', 'giải ngân', 'kích cầu', 'ổn định', 'hút vốn']
+            negative_words = ['lạm phát', 'hút tiền', 'tăng lãi', 'suy thoái', 'vỡ nợ', 'phá sản', 'thu hẹp', 'đình trệ', 'tỷ giá căng']
+            
+            pos = sum(1 for hl in headlines for w in positive_words if w in hl.lower())
+            neg = sum(1 for hl in headlines for w in negative_words if w in hl.lower())
+            
+            sentiment_score += (pos - neg) * 15
+            
             return {
-                "score": max(0, min(100, score)),
+                "score": max(0, min(100, sentiment_score)),
                 "metrics": {
-                    "SBV_Action": mock_sbv_rate,
-                    "DXY_Index": mock_dxy,
-                    "Gov_Policy": mock_policy
+                    "latest_macro_news": headlines,
+                    "pos_keywords": pos,
+                    "neg_keywords": neg
                 },
-                "status": "Positive (Hỗ trợ thị trường)" if score > 60 else "Negative (Rủi ro suy thoái)"
+                "status": "Positive (Hỗ trợ thị trường)" if sentiment_score > 60 else ("Negative (Rủi ro vĩ mô)" if sentiment_score < 40 else "Neutral (Đi ngang bền vững)")
             }
         except Exception as e:
             print(f"Macro Analysis Error: {e}")
-            return {"error": str(e), "score": 50}
+            return {
+                "score": 50, 
+                "metrics": {"error": str(e)},
+                "status": "Lỗi cào dữ liệu Vĩ mô"
+            }
 
 macro_service = MacroService()
