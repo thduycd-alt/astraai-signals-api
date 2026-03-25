@@ -44,7 +44,12 @@ Dựa vào data thô ở trên, bạn phải tự tay VIẾT LỜI BÌNH CHUYÊN
   "news_text": "...",
   "intraday_text": "...",
   "recommendation": "Tóm tắt hành động 50 chữ...",
-  "action": "BUY / STRONG_BUY / HOLD / SELL / STRONG_SELL (Tùy theo kết luận của bạn)"
+  "action": "BUY / STRONG_BUY / HOLD / SELL / STRONG_SELL (Tùy theo kết luận của bạn)",
+  "v4_metrics": {{
+      "compression_score": 85,
+      "whale_style": "Quỹ Đầu Tư Giá Trị / Đội Lái Đầu Cơ / Kéo Xả Phân Phối / Siết Nền Chờ Nổ",
+      "hunting_zones": [24.5, 27.2]
+  }}
 }}
 """
         
