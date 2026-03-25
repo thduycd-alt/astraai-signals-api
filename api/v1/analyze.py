@@ -50,12 +50,28 @@ async def analyze_stock(symbol: str):
     
     final_result = scoring_service.calculate_final(symbol, layers_payload)
 
-    # Trả về JSON theo cấu trúc Flutter yêu cầu
+    # --- Dữ Liệu Biểu Đồ Nến Thực Tế (Raw Chart Data) cho Giao Diện V3 ---
+    chart_list = []
+    if not df_daily.empty:
+        # Lấy 60 phiên gần nhất đúc thành mảng nến
+        chart_df = df_daily.tail(60).reset_index()
+        for _, row in chart_df.iterrows():
+            chart_list.append({
+                "time": str(row["time"])[:10], # YYYY-MM-DD
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row.get("volume", 0))
+            })
+
+    # Trả về JSON Siêu cấp V3
     return {
         "symbol": symbol,
         "status": "success",
         "data": {
             "layers": layers_payload,
-            "final_analysis": final_result
+            "final_analysis": final_result,
+            "chart_data": chart_list
         }
     }
