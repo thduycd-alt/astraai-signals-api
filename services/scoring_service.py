@@ -72,6 +72,11 @@ class ScoringService:
                 # final_payload["final_score"] = float(gemini_result.get("final_score", final_score))
                 final_payload["action"] = gemini_result.get("action", action)
                 final_payload["disclaimer"] = gemini_result.get("disclaimer", final_payload["disclaimer"])
+                final_payload["v4_metrics"] = gemini_result.get("v4_metrics", {
+                    "compression_score": 50,
+                    "whale_style": "Đang phân tích dòng tiền...",
+                    "hunting_zones": []
+                })
 
                 # Cập nhật Trực tiếp Text 6 Tầng Bằng Tiếng Việt Đậm Chất Chuyên Gia của Gemini
                 if "tech_text" in gemini_result: layers_data.get("technical", {})["expert_text"] = gemini_result["tech_text"]
