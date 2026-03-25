@@ -4,7 +4,8 @@ import json
 
 class GeminiService:
     def __init__(self):
-        self.api_key = os.environ.get("GEMINI_API_KEY", "AIzaSyDZ0ZfwEUu35_oT4IXJQz4E-ioSoqbh71Y")
+        # Hệ thống trích xuất Khóa API bằng Biến Môi trường (Bắt buộc Khai báo trên Render)
+        self.api_key = os.environ.get("GEMINI_API_KEY", "")
         if self.api_key:
             genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel('gemini-2.5-flash')
