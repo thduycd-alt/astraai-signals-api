@@ -48,7 +48,7 @@ async def analyze_stock(symbol: str):
         "intraday": intraday_data
     }
     
-    final_result = scoring_service.calculate_final(layers_payload)
+    final_result = scoring_service.calculate_final(symbol, layers_payload)
 
     # Trả về JSON theo cấu trúc Flutter yêu cầu
     return {
