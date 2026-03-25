@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: astraai-signals-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 8000

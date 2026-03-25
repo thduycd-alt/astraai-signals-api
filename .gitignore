@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Khong up thu muc moi truong ao cuc nang
+venv/
+env/
+.venv/
+
+# Khong up thong tin mat config
+.env
+.env.local
+
+# File he thong IDE
+.idea/
+.vscode/
+*.sqlite3
