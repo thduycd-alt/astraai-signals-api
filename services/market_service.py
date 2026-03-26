@@ -73,4 +73,28 @@ class MarketService:
             print(f"Market Overview Error: {e}")
             return {"error": str(e)}
 
+    @staticmethod
+    def get_watchlist_quotes(symbols: list[str]) -> dict:
+        results = {}
+        for sym in symbols:
+            try:
+                end_date = datetime.now().strftime('%Y-%m-%d')
+                start_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
+                df = stock_historical_data(sym, start_date, end_date, '1D', 'stock')
+                if not df.empty:
+                    last_row = df.iloc[-1]
+                    prev_row = df.iloc[-2] if len(df) > 1 else last_row
+                    price = float(last_row['close'])
+                    prev_close = float(prev_row['close'])
+                    change = round(price - prev_close, 2)
+                    pct_change = round((change / prev_close) * 100, 2)
+                    volume = int(last_row['volume'])
+                    results[sym] = {"price": price, "change": change, "pct_change": pct_change, "volume": volume}
+                else:
+                    results[sym] = {"price": 0, "change": 0, "pct_change": 0, "volume": 0}
+            except Exception as e:
+                print(f"Error fetching quote for {sym}: {e}")
+                results[sym] = {"price": 0, "change": 0, "pct_change": 0, "volume": 0}
+        return results
+
 market_service = MarketService()
