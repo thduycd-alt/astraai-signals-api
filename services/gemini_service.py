@@ -35,7 +35,12 @@ Dựa vào data thô ở trên, bạn phải tự tay VIẾT LỜI BÌNH CHUYÊN
 6. Intraday: Lệnh trong ngày.
 7. Cuối cùng, tóm tắt Lời khuyên cuối.
 
-Đầu ra DUY NHẤT LÀ ĐỊNH DẠNG JSON SAU (Không chứa text dài dòng bên ngoài):
+ĐẶC BIỆT CHÚ Ý CHO V4_METRICS THẬT SỰ CHÍNH XÁC:
+- "compression_score": Một CON SỐ TOÁN HỌC từ 0 đến 100 đánh giá độ nén của biểu đồ hiện tại (KHÔNG ĐƯỢC CHÉP SỐ CŨ, phải tự đánh giá).
+- "whale_style": CỤM TỪ KẾT LUẬN KIỂU CÁ MẬP (Ví dụ: "Quỹ Đầu Tư Giá Trị", "Đội Lái Đầu Cơ", "Kéo Xả Phân Phối", "Siết Nền Chờ Nổ", "Dòng Tiền Đứt Gãy"). Bạn phải dựa vào hành vi khối lượng để trả về 1 Cụm từ DUY NHẤT.
+- "hunting_zones": Một MẢNG CHỨA 2 SỐ THẬP PHÂN là GIÁ ĐÁY HỖ TRỢ và GIÁ ĐỈNH KHÁNG CỰ gần nhất so với giá hiện tại của cổ phiếu này (Dựa vào High/Low trong Data).
+
+Đầu ra DUY NHẤT LÀ ĐỊNH DẠNG JSON SAU (Các giá trị ở dưới CHỈ LÀ VÍ DỤ CẤU TRÚC, không được điền y hệt):
 {{
   "tech_text": "...",
   "sm_text": "...",
@@ -43,12 +48,11 @@ Dựa vào data thô ở trên, bạn phải tự tay VIẾT LỜI BÌNH CHUYÊN
   "macro_text": "...",
   "news_text": "...",
   "intraday_text": "...",
-  "recommendation": "Tóm tắt hành động 50 chữ...",
-  "action": "BUY / STRONG_BUY / HOLD / SELL / STRONG_SELL (Tùy theo kết luận của bạn)",
+  "recommendation": "Tóm tắt hành động...",
   "v4_metrics": {{
-      "compression_score": 85,
-      "whale_style": "Quỹ Đầu Tư Giá Trị / Đội Lái Đầu Cơ / Kéo Xả Phân Phối / Siết Nền Chờ Nổ",
-      "hunting_zones": [24.5, 27.2]
+      "compression_score": 62,
+      "whale_style": "Đội Lái Đầu Cơ",
+      "hunting_zones": [15.2, 17.0]
   }}
 }}
 """
