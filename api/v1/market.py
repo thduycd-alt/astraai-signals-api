@@ -19,3 +19,12 @@ async def get_sector_rotation():
     Phát tín hiệu Alert và kích hoạt Firebase Push Notification Tức Thời cho nhà đầu tư.
     """
     return sector_rotation_service.detect_rotation()
+
+@router.get("/quotes")
+async def get_quotes(symbols: str = ""):
+    """
+    Kéo giá Live cho nguyên 1 dàn Watchlist. Vd: ?symbols=HPG,VND,SSI
+    """
+    if not symbols: return {}
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    return market_service.get_watchlist_quotes(sym_list)
