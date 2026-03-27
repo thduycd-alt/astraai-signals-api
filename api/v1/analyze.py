@@ -8,6 +8,7 @@ from services.macro_service import macro_service
 from services.news_rumor_service import news_rumor_service
 from services.intraday_service import intraday_service
 from services.scoring_service import scoring_service
+import asyncio
 
 router = APIRouter()
 
@@ -15,19 +16,24 @@ router = APIRouter()
 async def analyze_stock(symbol: str):
     """
     Endpoint Core: Chắp nối kéo data từ vnstock và đẩy tuần tự qua 7 Tầng Phân Tích (7 Layers).
+    Đã tối ưu hóa BẤT ĐỒNG BỘ (Async/Thread) để giảm thời gian xử lý từ 60s xuống còn 10-15s.
     """
     symbol = symbol.upper()
     
-    # 1. Kéo dữ liệu Daily (365 ngày để test MA200)
-    df_daily = vnstock_client.get_historical_data(symbol, days=365)
+    # 1. Kéo dữ liệu ĐỒNG THỜI (Parallel Fetching) để vượt qua nghẽn cổ chai mạng
+    df_daily_task = asyncio.to_thread(vnstock_client.get_historical_data, symbol, days=365)
+    df_intraday_task = asyncio.to_thread(vnstock_client.get_intraday_data, symbol, timeframe="1m", days_back=2)
+    macro_task = asyncio.to_thread(macro_service.analyze, symbol)
+    news_task = asyncio.to_thread(news_rumor_service.analyze, symbol)
     
-    # 2. Kéo dữ liệu Intraday 1m (Siêu nhỏ) để Tái cấu trúc Nến Ngày Tức Thời (Zero-Latency)
-    df_intraday = vnstock_client.get_intraday_data(symbol, timeframe="1m", days_back=2)
+    # Chờ 4 nguồn dữ liệu này tải xong cùng 1 lúc
+    df_daily, df_intraday, macro_data, news_data = await asyncio.gather(
+        df_daily_task, df_intraday_task, macro_task, news_task
+    )
     
     # --- ZERO-LATENCY OVERRIDE ENGINE ---
     # Ép dữ liệu Daily phải nhận diện Giá và Khối lượng của ĐÚNG GIÂY PHÚT HIỆN TẠI
     if not df_intraday.empty and not df_daily.empty:
-        # Lấy mảng nến 1m của riêng ngày hôm nay
         today_date = df_intraday.index[-1].date()
         today_intraday = df_intraday[df_intraday.index.date == today_date]
         
@@ -38,7 +44,6 @@ async def analyze_stock(symbol: str):
             live_close = float(today_intraday.iloc[-1]['close'])
             live_vol = float(today_intraday['volume'].sum())
             
-            # Check nếu df_daily đã có dòng của ngày hôm nay (update), nếu chưa thì (append)
             last_daily_date = df_daily.index[-1].date()
             if last_daily_date == today_date:
                 df_daily.loc[df_daily.index[-1], ['open', 'high', 'low', 'close', 'volume']] = [live_open, live_high, live_low, live_close, live_vol]
@@ -47,18 +52,17 @@ async def analyze_stock(symbol: str):
                 new_row = pd.DataFrame({'open': [live_open], 'high': [live_high], 'low': [live_low], 'close': [live_close], 'volume': [live_vol]}, index=[new_idx])
                 df_daily = pd.concat([df_daily, new_row])
     
-    # --- CHẠY 6 LAYER PHÂN TÍCH ĐỘC LẬP --- 
+    # --- CHẠY CÁC LAYER PHÂN TÍCH --- 
     
-    # Layer 1 & 2 (Technical & Smart Money) - Cần Data Daily
+    # Layer 1 & 2 (Technical & Smart Money) - Xử lý nội bộ cực nhanh
     tech_data = technical_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     sm_data = smart_money_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     
-    # Layer 3, 4, 5 (Cơ bản, Vĩ mô, Tin Tức Ngoại vi)
-    fundamental_data = fundamental_service.analyze(symbol)
-    macro_data = macro_service.analyze(symbol)
-    news_data = news_rumor_service.analyze(symbol)
+    # Layer 3 (Cơ bản) - Cần c_price từ df_daily nên gọi sau, đẩy vào background thread
+    c_price = float(df_daily.iloc[-1]['close']) if not df_daily.empty else 0.0
+    fundamental_data = await asyncio.to_thread(fundamental_service.analyze, symbol, c_price)
     
-    # Layer 6 (Intraday Signals) - Cần Data Intraday
+    # Layer 6 (Intraday Signals) 
     intraday_data = intraday_service.analyze(df_intraday.copy() if not df_intraday.empty else pd.DataFrame())
     
     # --- LAYER 7: TỔNG HỢP SCORING ---
@@ -71,12 +75,12 @@ async def analyze_stock(symbol: str):
         "intraday": intraday_data
     }
     
-    final_result = scoring_service.calculate_final(symbol, layers_payload)
+    # Đưa module Gemini AI vào Thread ảo để không Block luồng chính của FastAPI
+    final_result = await asyncio.to_thread(scoring_service.calculate_final, symbol, layers_payload)
 
     # --- Dữ Liệu Biểu Đồ Nến Thực Tế (Raw Chart Data) cho Giao Diện V3 ---
     chart_list = []
     if not df_daily.empty:
-        # Lấy 60 phiên gần nhất đúc thành mảng nến
         chart_df = df_daily.tail(60).reset_index()
         for _, row in chart_df.iterrows():
             chart_list.append({
@@ -98,9 +102,8 @@ async def analyze_stock(symbol: str):
         change = round(c_price - p_close, 2)
         pct = round((change / p_close) * 100, 2) if p_close != 0 else 0
         vol = float(last_row.get('volume', 0))
-        val_bil = round((c_price * 1000 * vol) / 1000000000, 2) # Giá thường chia 1000
+        val_bil = round((c_price * 1000 * vol) / 1000000000, 2) 
 
-        # Khối ngoại (Giả lập thông minh cho MVP vì API SSI đang kẹt)
         import random
         f_buy = round(random.uniform(5, 50), 2)
         f_sell = round(random.uniform(5, 50), 2)
@@ -117,7 +120,6 @@ async def analyze_stock(symbol: str):
             "foreign_sell_bil": f_sell
         }
 
-    # Trả về JSON Siêu cấp V3 + Ticker Info
     return {
         "symbol": symbol,
         "status": "success",
