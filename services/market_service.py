@@ -6,6 +6,8 @@ import random
 class MarketService:
     @staticmethod
     def get_overview() -> dict:
+        from services.gemini_service import gemini_service
+        from services.sector_rotation_service import sector_rotation_service
         try:
             # 1. Kéo API Index Realtime từ vnstock
             end_date = datetime.now().strftime('%Y-%m-%d')
@@ -44,7 +46,22 @@ class MarketService:
                 {"symbol": "VIX", "group": "Securities", "percent_change": round(random.uniform(0, 6), 2), "value": random.randint(250, 600) * 1000000},
             ]
 
-            # 3. Robot Quét Lực Nước Ngoài & Tự doanh (Chart Syncfusion Data)
+            # 3. Lấy dữ liệu Dòng Tiền Ngành từ Sector Rotation Service
+            rot_data = sector_rotation_service.detect_rotation()
+            sector_flow = []
+            if "rotation_matrix" in rot_data:
+                for sec, stats in rot_data["rotation_matrix"].items():
+                    sector_flow.append({"sector": sec, "flow_index": stats.get("money_flow_index", 0)})
+            else:
+                sector_flow = [
+                    {"sector": "Ngân Hàng", "flow_index": -15.5},
+                    {"sector": "BĐS", "flow_index": 28.4},
+                    {"sector": "Chứng Khoán", "flow_index": 12.0},
+                    {"sector": "Thép", "flow_index": -5.0},
+                    {"sector": "Bán Lẻ", "flow_index": 4.5}
+                ]
+
+            # 4. Robot Quét Lực Nước Ngoài & Tự doanh (Chart Syncfusion Data)
             # Trả về chuỗi 5 ngày giao dịch gần nhất
             foreign_chart = []
             for i in range(4, -1, -1):
@@ -57,6 +74,14 @@ class MarketService:
                     "prop_sell": random.randint(250, 550)
                 })
 
+            # 5. Gọi AI để viết Text Đánh giá Toàn Cảnh
+            ai_data_bundle = {
+                "index": vnindex,
+                "change": change,
+                "sector_flow": sector_flow
+            }
+            ai_evaluation = gemini_service.synthesize_market_overview(ai_data_bundle)
+
             return {
                 "index": {
                     "VNINDEX": vnindex,
@@ -67,6 +92,8 @@ class MarketService:
                 },
                 "heatmap": heatmap_data, # Dạng List phẳng tiện cho Flutter Wrap
                 "foreign_flow": foreign_chart,
+                "sector_flow": sector_flow, # Bar Chart Ngành
+                "ai_evaluation": ai_evaluation, # LLM Tức Thời
                 "status": "success"
             }
         except Exception as e:

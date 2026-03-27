@@ -20,27 +20,29 @@ class GeminiService:
             return {}
 
         prompt = f"""
-Bạn là Giám đốc Phân tích Định lượng (AstraAI Signals V3 Enterprise).
+Bạn là Giám đốc Phân tích Định lượng (AstraAI Signals V6.0 Alpha).
 Hãy đọc kỹ kết quả Dữ Liệu Thô (Raw Data) của cổ phiếu {symbol} dưới đây:
 
 {json.dumps(layers_data, ensure_ascii=False)}
 
-YÊU CẦU BẮT BUỘC:
-Dựa vào data thô ở trên, bạn phải tự tay VIẾT LỜI BÌNH CHUYÊN SÂU bằng Tiếng Việt cho TỪNG TẦNG MỘT (Khoảng 50-70 chữ mỗi tầng). Bố cục chuyên nghiệp như Quỹ phòng hộ (Hedge Fund).
-1. Phân tích Kỹ thuật: Phải nhắc đến Xu hướng, SMC, Breakout/Pullback, MACD/RSI.
-2. Dòng tiền (Smart Money): Phải nhắc đến Lực mua/bán, Order lớn/nhỏ, Gom bao nhiêu triệu qua 15 phiên, Khối ngoại.
-3. Cơ bản: Đánh giá nhanh về lợi nhuận, định giá P/E.
-4. Vĩ mô: Bạn PHẢI đọc KỸ các Danh sách Tin Vĩ mô (Nội địa & Thế giới) vừa được cào về trong Data Tầng 4. Từ đó đánh giá chân thực nhất (Chiến tranh, FED, Lãi suất, Vàng, BĐS). Tối kỵ việc "Bịa" hoặc cho rằng "Ổn định" nếu trong Tin tức có đề cập đến khủng hoảng/biến động!
-5. Tin đồn: PHẢI trích dẫn trực tiếp Tin tức nóng nhất của Cổ phiếu này từ Data Tầng 5 và đánh giá tâm lý FOMO/FUD ở ngay thời điểm hiện tại. Tối kỵ việc tóm tắt chung chung.
-6. Intraday: Lệnh trong ngày.
-7. Cuối cùng, tóm tắt Lời khuyên cuối.
+YÊU CẦU KHẮC NGHIỆT (STRICT CONCISENESS RULE):
+TUYỆT ĐỐI KHÔNG viết đoạn văn dài. Bạn PHẢI viêt dạng GẠCH ĐẦU DÒNG (Bullet Points) cho từng tầng phân tích.
+Mỗi tầng CHỈ ĐƯỢC TỐI ĐA 2 GẠCH ĐẦU DÒNG. Mỗi dòng DƯỚI 20 TỪ. Cấm giải thích dông dài. CHỈ CHÁNH VÀO KẾT LUẬN (Tốt/Xấu/Hành Động).
 
-ĐẶC BIỆT CHÚ Ý CHO V4_METRICS THẬT SỰ CHÍNH XÁC:
-- "compression_score": Một CON SỐ TOÁN HỌC từ 0 đến 100 đánh giá độ nén của biểu đồ hiện tại (KHÔNG ĐƯỢC CHÉP SỐ CŨ, phải tự đánh giá).
-- "whale_style": CỤM TỪ KẾT LUẬN KIỂU CÁ MẬP (Ví dụ: "Quỹ Đầu Tư Giá Trị", "Đội Lái Đầu Cơ", "Kéo Xả Phân Phối", "Siết Nền Chờ Nổ", "Dòng Tiền Đứt Gãy"). Bạn phải dựa vào hành vi khối lượng để trả về 1 Cụm từ DUY NHẤT.
-- "hunting_zones": Một MẢNG CHỨA 2 SỐ THẬP PHÂN là GIÁ ĐÁY HỖ TRỢ và GIÁ ĐỈNH KHÁNG CỰ gần nhất so với giá hiện tại của cổ phiếu này (Dựa vào High/Low trong Data).
+1. Phân tích Kỹ thuật: Xu hướng chính? Tín hiệu MACD/RSI Tốt hay Xấu?
+2. Dòng tiền: Cá mập đang gom hay xả? Khối ngoại mua hay bán ròng?
+3. Cơ bản: P/E đắt hay rẻ so với trung bình?
+4. Vĩ mô: Trích XUẤT ĐÚNG 1 TIN NÓNG NHẤT trong Data Tầng 4. Kết luận tin này TÍCH CỰC hay TIÊU CỰC.
+5. Tin đồn/Sự kiện: Đánh giá tâm lý FOMO/FUD hiện hữu từ Data Tầng 5.
+6. Intraday: Lực mua/bán chủ động trong ngày.
+7. Khuyến nghị (Recommendation): CHỈ GHI ĐÚNG 1 CỤM TỪ (MUA MẠNH / NẮM GIỮ / BÁN CHẶN LÃI / QUAN SÁT) kèm 1 lý do ngắn.
 
-Đầu ra DUY NHẤT LÀ ĐỊNH DẠNG JSON SAU (Các giá trị ở dưới CHỈ LÀ VÍ DỤ CẤU TRÚC, không được điền y hệt):
+BẮT BUỘC ĐÁNH GIÁ CHỈ SỐ V4_METRICS:
+- "compression_score": Số thập phân 0-100 đo độ nén giá.
+- "whale_style": 1 Cụm từ DUY NHẤT (VD: "Gom Hàng Tích Lũy", "Kéo Xả Phân Phối", "Lái Đảo Hàng", "Siết Nền").
+- "hunting_zones": Mảng chứa [Giá Đáy Hỗ Trợ, Giá Đỉnh Kháng Cự] gần nhất.
+
+Đầu ra DUY NHẤT LÀ JSON (Các giá trị dưới là VÍ DỤ CẤU TRÚC):
 {{
   "tech_text": "...",
   "sm_text": "...",
@@ -76,5 +78,28 @@ Dựa vào data thô ở trên, bạn phải tự tay VIẾT LỜI BÌNH CHUYÊN
         except Exception as e:
             print(f"Gemini API Error: {e}")
             return {}
+
+    def synthesize_market_overview(self, data: dict) -> str:
+        """
+        Layer 8: Toàn cảnh Thị trường. Phân tích Dòng tiền Luân chuyển.
+        """
+        if not self.model:
+            return "Hệ thống AI Đang Tắt (Thiếu API Key)."
+        
+        prompt = f"""
+Bạn là Tổng Tư Lệnh của AstraAI Signals V6.
+Dựa vào số liệu Tòa Cảnh (VNINDEX & Dòng Nhóm Ngành) sau đây:
+{json.dumps(data, ensure_ascii=False)}
+
+YÊU CẦU KHẮC NGHIỆT (DƯỚI 50 TỪ):
+Viết đúng 1 đoạn văn siêu ngắn gọn, đi thẳng vào kết luận. Lựa lời văn sắc bén, lạnh lùng của dân Trading.
+1. VNINDEX hiện tại đang Tích lũy, FOMO hay Phân phối?
+2. Dòng tiền (Khối lượng) đang CHẢY MẠNH NHẤT MUA RÒNG vào Ngành nào (Dựa vào số dương cao nhất của sector_flow) và RÚT ĐÁY KHỎI Ngành nào?
+Tuyệt đối không giải thích dông dài. KHÔNG VIẾT DẠNG JSON. Viết dạng Text bình thường.
+        """
+        try:
+            return self.model.generate_content(prompt).text.strip()
+        except Exception as e:
+            return f"Lỗi AI: Nguồn cấp nghẽn ({e})."
 
 gemini_service = GeminiService()
