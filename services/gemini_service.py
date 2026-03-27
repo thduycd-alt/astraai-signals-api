@@ -30,8 +30,8 @@ Dựa vào data thô ở trên, bạn phải tự tay VIẾT LỜI BÌNH CHUYÊN
 1. Phân tích Kỹ thuật: Phải nhắc đến Xu hướng, SMC, Breakout/Pullback, MACD/RSI.
 2. Dòng tiền (Smart Money): Phải nhắc đến Lực mua/bán, Order lớn/nhỏ, Gom bao nhiêu triệu qua 15 phiên, Khối ngoại.
 3. Cơ bản: Đánh giá nhanh về lợi nhuận, định giá P/E.
-4. Vĩ mô: Trích dẫn tin vĩ mô CafeF, móc nối với Tỷ giá DXY, FED, Lãi suất VN.
-5. Tin đồn: Đọc các tin CafeF được cào về và đánh giá tâm lý Fomo/Fud.
+4. Vĩ mô: Bạn PHẢI đọc KỸ các Danh sách Tin Vĩ mô (Nội địa & Thế giới) vừa được cào về trong Data Tầng 4. Từ đó đánh giá chân thực nhất (Chiến tranh, FED, Lãi suất, Vàng, BĐS). Tối kỵ việc "Bịa" hoặc cho rằng "Ổn định" nếu trong Tin tức có đề cập đến khủng hoảng/biến động!
+5. Tin đồn: PHẢI trích dẫn trực tiếp Tin tức nóng nhất của Cổ phiếu này từ Data Tầng 5 và đánh giá tâm lý FOMO/FUD ở ngay thời điểm hiện tại. Tối kỵ việc tóm tắt chung chung.
 6. Intraday: Lệnh trong ngày.
 7. Cuối cùng, tóm tắt Lời khuyên cuối.
 

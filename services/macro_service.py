@@ -13,23 +13,29 @@ class MacroService:
             headlines = []
             sentiment_score = 50
             
-            # --- CÀO TIN TỨC VĨ MÔ THỰC TẾ ---
-            url = "https://cafef.vn/vi-mo-dau-tu.chn"
+            # --- CÀO TIN TỨC VĨ MÔ THỰC TẾ (VIỆT NAM & THẾ GIỚI) ---
+            urls = [
+                "https://cafef.vn/vi-mo-dau-tu.chn",
+                "https://cafef.vn/tai-chinh-quoc-te.chn"
+            ]
             headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(url, headers=headers, timeout=5)
             
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                h3_tags = soup.find_all('h3')
-                # Lấy 5 tin Vĩ mô trang bìa nóng hổi nhất
-                for tag in h3_tags[:8]:  
-                    a_tag = tag.find('a')
-                    if a_tag and a_tag.text.strip():
-                        txt = a_tag.text.strip()
-                        if len(txt) > 20 and txt not in headlines:
-                            headlines.append(txt)
-                            if len(headlines) >= 5:
-                                break
+            for url in urls:
+                response = requests.get(url, headers=headers, timeout=5)
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    h3_tags = soup.find_all('h3')
+                    # Lấy 5 tin nóng nhất từ mỗi trang
+                    count = 0
+                    for tag in h3_tags[:15]:  
+                        a_tag = tag.find('a')
+                        if a_tag and a_tag.text.strip():
+                            txt = a_tag.text.strip()
+                            if len(txt) > 20 and txt not in headlines:
+                                headlines.append(txt)
+                                count += 1
+                                if count >= 3: # Tổng 6 tin (3 nội + 3 ngoại)
+                                    break
             
             if not headlines:
                 headlines = ["NHNN tiếp tục duy trì các giải pháp nới lỏng tiền tệ để hỗ trợ tăng trưởng."]

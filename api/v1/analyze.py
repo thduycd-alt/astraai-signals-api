@@ -21,8 +21,31 @@ async def analyze_stock(symbol: str):
     # 1. Kéo dữ liệu Daily (365 ngày để test MA200)
     df_daily = vnstock_client.get_historical_data(symbol, days=365)
     
-    # 2. Kéo dữ liệu Intraday 5m (để test dò đáy/đỉnh lớp 6)
-    df_intraday = vnstock_client.get_intraday_data(symbol, timeframe="5m")
+    # 2. Kéo dữ liệu Intraday 1m (Siêu nhỏ) để Tái cấu trúc Nến Ngày Tức Thời (Zero-Latency)
+    df_intraday = vnstock_client.get_intraday_data(symbol, timeframe="1m", days_back=2)
+    
+    # --- ZERO-LATENCY OVERRIDE ENGINE ---
+    # Ép dữ liệu Daily phải nhận diện Giá và Khối lượng của ĐÚNG GIÂY PHÚT HIỆN TẠI
+    if not df_intraday.empty and not df_daily.empty:
+        # Lấy mảng nến 1m của riêng ngày hôm nay
+        today_date = df_intraday.index[-1].date()
+        today_intraday = df_intraday[df_intraday.index.date == today_date]
+        
+        if not today_intraday.empty:
+            live_open = float(today_intraday.iloc[0]['open'])
+            live_high = float(today_intraday['high'].max())
+            live_low = float(today_intraday['low'].min())
+            live_close = float(today_intraday.iloc[-1]['close'])
+            live_vol = float(today_intraday['volume'].sum())
+            
+            # Check nếu df_daily đã có dòng của ngày hôm nay (update), nếu chưa thì (append)
+            last_daily_date = df_daily.index[-1].date()
+            if last_daily_date == today_date:
+                df_daily.loc[df_daily.index[-1], ['open', 'high', 'low', 'close', 'volume']] = [live_open, live_high, live_low, live_close, live_vol]
+            else:
+                new_idx = pd.to_datetime(today_date)
+                new_row = pd.DataFrame({'open': [live_open], 'high': [live_high], 'low': [live_low], 'close': [live_close], 'volume': [live_vol]}, index=[new_idx])
+                df_daily = pd.concat([df_daily, new_row])
     
     # --- CHẠY 6 LAYER PHÂN TÍCH ĐỘC LẬP --- 
     
