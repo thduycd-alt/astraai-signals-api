@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.v1 import analyze, intraday, chat, market
+from api.v1 import analyze, intraday, chat, market, comments, alerts
 
 app = FastAPI(
     title="AstraAI Signals API",
@@ -22,6 +22,8 @@ app.include_router(analyze.router, prefix="/api/v1/analyze", tags=["1. 7-Layer A
 app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["2. Intraday Signals"])
 app.include_router(market.router, prefix="/api/v1/market", tags=["3. Market Overview & Rotation"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["4. Chatbot AI"])
+app.include_router(comments.router, prefix="/api/v1/comments", tags=["5. Social Comments"])
+app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["6. Shark Alerts"])
 
 @app.get("/")
 async def root():
@@ -33,4 +35,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    # CRITICAL: Tắt reload=True trên Production để tránh sập Server khi SQLite ghi file
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
