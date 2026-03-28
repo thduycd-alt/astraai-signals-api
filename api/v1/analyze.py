@@ -20,16 +20,11 @@ async def analyze_stock(symbol: str):
     """
     symbol = symbol.upper()
     
-    # 1. Kéo dữ liệu ĐỒNG THỜI (Parallel Fetching) để vượt qua nghẽn cổ chai mạng
-    df_daily_task = asyncio.to_thread(vnstock_client.get_historical_data, symbol, days=365)
-    df_intraday_task = asyncio.to_thread(vnstock_client.get_intraday_data, symbol, timeframe="1m", days_back=2)
-    macro_task = asyncio.to_thread(macro_service.analyze, symbol)
-    news_task = asyncio.to_thread(news_rumor_service.analyze, symbol)
-    
-    # Chờ 4 nguồn dữ liệu này tải xong cùng 1 lúc
-    df_daily, df_intraday, macro_data, news_data = await asyncio.gather(
-        df_daily_task, df_intraday_task, macro_task, news_task
-    )
+    # 1. Kéo dữ liệu TUẦN TỰ (Sequential Fetching) để GIẢM TẢI RAM (Chống Sập Mã 137 trên Render 512MB)
+    df_daily = vnstock_client.get_historical_data(symbol, days=365)
+    df_intraday = vnstock_client.get_intraday_data(symbol, timeframe="1m", days_back=2)
+    macro_data = macro_service.analyze(symbol)
+    news_data = news_rumor_service.analyze(symbol)
     
     # --- ZERO-LATENCY OVERRIDE ENGINE ---
     # Ép dữ liệu Daily phải nhận diện Giá và Khối lượng của ĐÚNG GIÂY PHÚT HIỆN TẠI
@@ -58,9 +53,9 @@ async def analyze_stock(symbol: str):
     tech_data = technical_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     sm_data = smart_money_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     
-    # Layer 3 (Cơ bản) - Cần c_price từ df_daily nên gọi sau, đẩy vào background thread
+    # Layer 3 (Cơ bản) - Cần c_price từ df_daily
     c_price = float(df_daily.iloc[-1]['close']) if not df_daily.empty else 0.0
-    fundamental_data = await asyncio.to_thread(fundamental_service.analyze, symbol, c_price)
+    fundamental_data = fundamental_service.analyze(symbol, current_price=c_price)
     
     # Layer 6 (Intraday Signals) 
     intraday_data = intraday_service.analyze(df_intraday.copy() if not df_intraday.empty else pd.DataFrame())

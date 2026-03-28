@@ -19,7 +19,7 @@ async def get_intraday_chart(symbol: str, timeframe: str = Query("1m", pattern="
     if df.index.name == 'time':
         df = df.reset_index()
         
-    df['time'] = df['time'].dt.strftime('%H:%M %d/%m')
+    df['time'] = df['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
     # Lọc 100 nến phút gần nhất để biểu đồ trên Mobile chạy mượt mà không bị kẹt bộ nhớ
     recent_df = df.tail(100)
