@@ -107,14 +107,24 @@ class FundamentalService:
     def analyze(symbol: str, current_price: float = 0.0) -> dict:
         try:
             # ── Bypass broken financial_ratio (TCBS API changed 'year'/'quarter' format) ──
+            _tcbs_headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Referer': 'https://tcinvest.tcbs.com.vn/',
+                'DNT': '1',
+            }
+
             def _fetch_direct(period='yearly'):
                 try:
                     x = 1 if period == 'yearly' else 0
                     url = (f'https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance'
                            f'/{symbol}/financialratio?yearly={x}&isAll=true')
-                    data = requests.get(url, timeout=20).json()
+                    resp = requests.get(url, headers=_tcbs_headers, timeout=20)
+                    data = resp.json()
                     if not isinstance(data, list) or len(data) == 0:
-                        print(f"[{symbol}] _fetch_direct({period}): empty response")
+                        print(f"[{symbol}] _fetch_direct({period}): not a list or empty. "
+                              f"status={resp.status_code} body={str(data)[:200]}")
                         return None, False
                     # rows=periods, cols=indicators — DO NOT transpose
                     df_raw = pd.DataFrame(data)
