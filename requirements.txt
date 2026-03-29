@@ -4,6 +4,7 @@ pydantic
 pydantic-settings
 vnstock==0.2.8.5
 vnstock3
+pytz
 pandas
 pandas-ta
 scipy
