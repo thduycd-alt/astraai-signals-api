@@ -95,18 +95,39 @@ class ScoringService:
     @staticmethod
     def _inject_expert_analysis(layers: dict):
         tech, ts = layers.get("technical", {}), layers.get("technical", {}).get("score", 50)
+        rsi_val = layers.get("technical", {}).get("indicators", {}).get("rsi_14", 50)
+        macd_status = layers.get("technical", {}).get("indicators", {}).get("macd_status", "")
+        divergence = layers.get("technical", {}).get("divergence_signal", "")
+        stoch_k = layers.get("technical", {}).get("indicators", {}).get("stoch_rsi_k", 50)
+        trend_txt = layers.get("technical", {}).get("trend", "")
+        action_txt = layers.get("technical", {}).get("price_action_setup", "")
+        smc_txt = layers.get("technical", {}).get("smc_signal", "")
+
+        divergence_line = f" Phân kỳ: {divergence}." if divergence and "Không có" not in divergence else ""
+        stoch_line = f" Stoch RSI: {stoch_k:.0f}/100 ({'quá mua — thận trọng' if stoch_k > 75 else 'quá bán — cơ hội' if stoch_k < 25 else 'trung tính'})." if stoch_k != 50 else ""
+
         tech["layer_title"] = "Tầng 1: Kỹ Thuật (25%)"
         tech["color_hex"] = "#448AFF"
-        tech["expert_text"] = f"Dựa trên phân tích kỹ thuật hiện hành, hệ thống ghi nhận điểm sức mạnh đạt {ts}/100. Các chỉ báo động lượng như RSI và MACD đang cho thấy sự đồng thuận nhất định {'theo hướng tích cực, ủng hộ nhịp tăng ngắn hạn.' if ts >= 60 else 'ở mức trung tính, cần thêm dòng tiền để bứt phá.' if ts >= 45 else 'theo chiều hướng rủi ro, cảnh báo khả năng điều chỉnh.'} Dải Bollinger Band phản ánh biến động giá đang {'mở rộng biên trên.' if ts >= 60 else 'bó hẹp hoặc mở biên rơi.'} Nhà đầu tư nên bám sát nền đồ thị kỹ thuật tại vùng giá này."
+        tech["expert_text"] = (f"Xu hướng cốt lõi: {trend_txt}. RSI(14) = {rsi_val:.1f} — "
+            f"{'vùng quá bán hấp dẫn' if rsi_val < 35 else 'quá mua cần thận' if rsi_val > 65 else 'trung tính'}. "
+            f"MACD: {macd_status}. Mô hình giá: {action_txt}. SMC: {smc_txt}.{divergence_line}{stoch_line} "
+            f"Hệ thống chấm {'mạnh' if ts >= 70 else 'yếu' if ts < 40 else 'trung bình'} {ts}/100 Tầng Kỹ Thuật.")
 
         sm, sms = layers.get("smart_money", {}), layers.get("smart_money", {}).get("score", 50)
         net_shark = sm.get("volume_analysis", {}).get("net_shark_vol", 0)
+        cmf_val   = sm.get("cmf", {}).get("value", 0)
+        obv_trend = sm.get("obv_trend", "")
+        vol_mult  = sm.get("volume_analysis", {}).get("vol_multiplier", 1.0)
         shark_action = "GOM RÒNG" if net_shark > 0 else "XẢ RÒNG"
-        shark_text = f" Thống kê 15 phiên gần nhất: Cá mập (Smart Money) đã {shark_action} {abs(net_shark/1000000):.1f} triệu cổ phiếu." if net_shark != 0 else ""
+        shark_qty = abs(net_shark / 1_000_000)
 
         sm["layer_title"] = "Tầng 2: Smart Money (25%)"
         sm["color_hex"] = "#18FFFF"
-        sm["expert_text"] = f"Hệ thống dò quét dòng tiền thông minh (Smart Money) chấm điểm ở mức {sms}/100. {'Phát hiện dấu hiệu MUA GOM âm thầm từ các tổ chức lớn.' if sms >= 60 else 'Dòng tiền đang giằng co, chưa có dấu hiệu tay to nhập cuộc rõ ràng.' if sms >= 40 else 'Cảnh báo: Phát hiện áp lực PHÂN KỲ KÍN và dòng tiền lớn âm thầm XẢ HÀNG.'}{shark_text} Chỉ báo CMF và OBV chỉ ra tỷ trọng lệnh khối lượng lớn đang {'chiếm ưu thế ở phe Mua.' if sms >= 60 else 'tạo sức ép chốt lời lên thị giá hiện tại.'}"
+        sm["expert_text"] = (f"Dòng tiền thông minh chấm điểm {sms}/100. "
+            f"OBV: {obv_trend}. CMF(20) = {cmf_val:+.3f} — {'lực cầu mạnh' if cmf_val > 0.05 else 'lực cung áp đảo' if cmf_val < -0.05 else 'cân bằng'}. "
+            f"15 phiên gần nhất: Cá mập đã {shark_action} {shark_qty:.1f}M cổ phiếu. "
+            f"Khối lượng phiên này {'bùng nổ x3+ lần TB20 — dấu hiệu tay to tham gia tức thì.' if vol_mult >= 3 else f'= {vol_mult:.1f}x TB20.'} " 
+            f"{'Tiềm năng gom hàng tốt.' if sms >= 60 else 'Cầnh giác xả lưu ý.' if sms < 40 else 'Giàng co chưa rõ.'}")  
 
         fd, fds = layers.get("fundamental", {}), layers.get("fundamental", {}).get("score", 50)
         fd["layer_title"] = "Tầng 3: Cơ Bản (15%)"

@@ -1,6 +1,7 @@
 import os
 import google.generativeai as genai
 import json
+import re
 
 class GeminiService:
     def __init__(self):
@@ -60,23 +61,25 @@ BẮT BUỘC ĐÁNH GIÁ CHỈ SỐ V4_METRICS:
 """
         
         try:
-            response = self.model.generate_content(prompt)
-            # Lọc bớt block text ```json
-            result_text = response.text.strip()
-            import re
-            
-            # Tương thích với việc Model hay nói nhiều "Dạ phần tích đây ạ: { ... }"
-            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
-            if json_match:
-                clean_json = json_match.group(0)
-                result_json = json.loads(clean_json)
-                result_json["disclaimer"] = "Báo cáo Tự động tạo bởi Gemini 2.5 Flash AI kết hợp AstraAI V3 Enterprise Algorithms."
-                return result_json
-            else:
-                print("Gemini Output Not Found JSON Data")
-                return {}
+            # JSON Mode: Ép output JSON cứng, loại bỏ hoàn toàn lỗi parse
+            response = self.model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            result_json = json.loads(response.text)
+            result_json["disclaimer"] = "Báo cáo Tự động tạo bởi Gemini 2.5 Flash AI kết hợp AstraAI V3 Enterprise Algorithms."
+            return result_json
         except Exception as e:
             print(f"Gemini API Error: {e}")
+            # Fallback: thử parse regex nếu JSON mode lỗi
+            try:
+                json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group(0))
+            except:
+                pass
             return {}
 
     def synthesize_market_overview(self, data: dict) -> str:

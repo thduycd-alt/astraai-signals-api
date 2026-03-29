@@ -8,6 +8,7 @@ from services.macro_service import macro_service
 from services.news_rumor_service import news_rumor_service
 from services.intraday_service import intraday_service
 from services.scoring_service import scoring_service
+from services.financial_calendar_service import financial_calendar_service
 import asyncio
 
 router = APIRouter()
@@ -118,6 +119,9 @@ async def analyze_stock(symbol: str):
             "foreign_sell_bil": f_sell
         }
 
+    # --- Lịch Sự Kiện Tài Chính (Tầng 8 mới) ---
+    calendar_data = financial_calendar_service.get_upcoming_events(symbol)
+
     return {
         "symbol": symbol,
         "status": "success",
@@ -125,6 +129,7 @@ async def analyze_stock(symbol: str):
             "ticker_info": ticker_info,
             "layers": layers_payload,
             "final_analysis": final_result,
-            "chart_data": chart_list
+            "chart_data": chart_list,
+            "financial_calendar": calendar_data
         }
     }

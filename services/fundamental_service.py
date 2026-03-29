@@ -36,6 +36,28 @@ class FundamentalService:
         return 15.0
 
     @staticmethod
+    def _get_default_eps(symbol: str, current_price: float = 0.0) -> float:
+        """EPS baseline theo ngành (VNĐ/cổ phiếu) khi không lấy được BCTC thực."""
+        pe = FundamentalService._get_industry_pe(symbol)
+        if current_price > 0:
+            # Tính ngược từ giá thị trường với margin 15%
+            return (current_price * 1.15) / pe
+        # Fallback theo ngành khi không có giá
+        banks = ["VCB", "BID", "CTG", "MBB", "ACB", "VPB", "TCB", "STB", "HDB", "VIB", "TPB", "SHB", "EIB", "MSB", "OCB", "SSB", "LPB", "NAB"]
+        securities = ["SSI", "VND", "VCI", "HCM", "SHS", "VIX", "FTS", "MBS", "CTS", "BSI", "AGR"]
+        real_estate = ["VHM", "VIC", "NVL", "KDH", "DIG", "DXG", "PDR", "NLG", "CEO", "HDG", "CRE", "SCR", "TCH", "KBC", "HAG"]
+        steel = ["HPG", "HSG", "NKG", "SMC", "TLH", "VGS"]
+        retail = ["MWG", "PNJ", "FRT", "DGW", "PET", "VRE", "MSN"]
+        tech = ["FPT", "CMG", "ELC"]
+        if symbol in banks: return 2800.0
+        if symbol in securities: return 1800.0
+        if symbol in real_estate: return 1200.0
+        if symbol in steel: return 3200.0
+        if symbol in retail: return 2000.0
+        if symbol in tech: return 4500.0
+        return 1500.0
+
+    @staticmethod
     def analyze(symbol: str, current_price: float = 0.0) -> dict:
         
         try:

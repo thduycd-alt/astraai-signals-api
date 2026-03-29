@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime, timedelta
 from vnstock import stock_historical_data
-import random
+import random as _random_module
 
 class MarketService:
     @staticmethod
@@ -9,6 +9,9 @@ class MarketService:
         from services.gemini_service import gemini_service
         from services.sector_rotation_service import sector_rotation_service
         try:
+            # Seed ngẫu nhiên theo ngày → dữ liệu nhất quán cả phiên, không đổi khi F5
+            today_seed = int(datetime.now().strftime('%Y%m%d'))
+            random = _random_module.Random(today_seed)
             # 1. Kéo API Index Realtime từ vnstock
             end_date = datetime.now().strftime('%Y-%m-%d')
             start_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')

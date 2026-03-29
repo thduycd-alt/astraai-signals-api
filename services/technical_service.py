@@ -20,10 +20,11 @@ class TechnicalService:
             if len(df) >= 200:
                 df.ta.sma(length=200, append=True)
 
-            # 2. RSI & MACD & BBands
+            # 2. RSI, MACD, BBands & Stochastic RSI
             df.ta.rsi(length=14, append=True)
             df.ta.macd(fast=12, slow=26, signal=9, append=True)
             df.ta.bbands(length=20, std=2, append=True)
+            df.ta.stochrsi(length=14, append=True)
 
             # Lấy nến hiện tại và nến trước đó
             latest = df.iloc[-1]
@@ -72,8 +73,23 @@ class TechnicalService:
             elif trend == "Uptrend (Sóng tăng mạnh)" and latest['low'] <= ma20 and close_price > ma20:
                 action_pattern = "Pullback Đẹp (Rũ bỏ về đường hỗ trợ MA20 và Rút chân)"
 
-            # --- TÍNH ĐIỂM SỐ CHUYÊN MÔN ---
+            # --- PHÁT HIỆN PHÂN KỲ RSI (Divergence — Tín Hiệu Đảo Chiều Mạnh) ---
             rsi = latest.get('RSI_14', 50)
+            rsi_series = df['RSI_14'].dropna()
+            price_series = df['close']
+            divergence_signal = "Không có phân kỳ"
+            if len(rsi_series) >= 10:
+                # Bearish Divergence: Giá tăng đỉnh mới nhưng RSI tạo đỉnh thấp hơn → sắp giảm
+                if price_series.iloc[-1] > price_series.iloc[-5] and rsi_series.iloc[-1] < rsi_series.iloc[-5]:
+                    divergence_signal = "⚠️ Phân Kỳ Âm (Bearish Divergence): Giá tăng đỉnh mới, RSI suy yếu — nguy cơ đảo chiều"
+                # Bullish Divergence: Giá tạo đáy mới nhưng RSI tạo đáy cao hơn → sắp tăng
+                elif price_series.iloc[-1] < price_series.iloc[-5] and rsi_series.iloc[-1] > rsi_series.iloc[-5]:
+                    divergence_signal = "✅ Phân Kỳ Dương (Bullish Divergence): Giá giảm đáy mới, RSI hồi phục — tín hiệu bắt đáy"
+
+            stoch_k = latest.get('STOCHRSIk_14_14_3_3', 50)
+            stoch_d = latest.get('STOCHRSId_14_14_3_3', 50)
+
+            # --- TÍNH ĐIỂM SỐ CHUYÊN MÔN ---
             macd_line = latest.get('MACD_12_26_9', 0)
             signal_line = latest.get('MACDs_12_26_9', 0)
             
@@ -94,13 +110,24 @@ class TechnicalService:
             if smc_signal == "Bullish Order Block (Điểm nổ của Cá mập)": score += 10
             elif "Bearish" in smc_signal: score -= 10
 
+            # RSI Divergence — Tín hiệu đảo chiều mạnh
+            if "Bearish Divergence" in divergence_signal: score -= 15
+            elif "Bullish Divergence" in divergence_signal: score += 15
+
+            # Stochastic RSI xác nhận
+            if pd.notna(stoch_k) and pd.notna(stoch_d):
+                if stoch_k > 80 and stoch_d > 80: score -= 5  # Vùng quá mua
+                elif stoch_k < 20 and stoch_d < 20: score += 5  # Vùng quá bán
+
             return {
                 "score": max(0, min(100, score)),
                 "trend": trend,
                 "smc_signal": smc_signal,
                 "price_action_setup": action_pattern,
+                "divergence_signal": divergence_signal,
                 "indicators": {
                     "rsi_14": round(rsi, 2),
+                    "stoch_rsi_k": round(float(stoch_k), 2) if pd.notna(stoch_k) else 50.0,
                     "macd_status": "Giao cắt Mua" if macd_line > signal_line else "Giao cắt Bán",
                     "price_vs_ma20": "Nằm Trên Hỗ Trợ" if close_price > ma20 else "Nằm Dưới Kháng Cự"
                 }
