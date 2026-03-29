@@ -106,7 +106,6 @@ class FundamentalService:
     @staticmethod
     def analyze(symbol: str, current_price: float = 0.0) -> dict:
         try:
-            # ── Bypass broken financial_ratio (TCBS API changed 'year'/'quarter' format) ──
             _tcbs_headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
                 'Content-Type': 'application/json',
@@ -115,96 +114,96 @@ class FundamentalService:
                 'DNT': '1',
             }
 
-            def _fetch_direct(period='yearly'):
+            BASE = 'https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance'
+
+            def safe_get(d, default):
                 try:
-                    x = 1 if period == 'yearly' else 0
-                    url = (f'https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance'
-                           f'/{symbol}/financialratio?yearly={x}&isAll=true')
-                    resp = requests.get(url, headers=_tcbs_headers, timeout=20)
-                    data = resp.json()
-                    if not isinstance(data, list) or len(data) == 0:
-                        print(f"[{symbol}] _fetch_direct({period}): not a list or empty. "
-                              f"status={resp.status_code} body={str(data)[:200]}")
-                        return None, False
-                    # rows=periods, cols=indicators — DO NOT transpose
-                    df_raw = pd.DataFrame(data)
-                    df_raw = df_raw.dropna(axis=1, how='all')
-                    # Sort newest-first by year if available
-                    if 'year' in df_raw.columns:
-                        df_raw = df_raw.sort_values('year', ascending=False).reset_index(drop=True)
-                    print(f"[{symbol}] _fetch_direct({period}): {len(df_raw)} rows, "
-                          f"cols={list(df_raw.columns)[:10]}")
-                    return df_raw, period == 'yearly'
-                except Exception as e:
-                    print(f"[{symbol}] _fetch_direct({period}) EXCEPTION: {e}")
-                    return None, False
-
-            df, is_yearly = _fetch_direct('yearly')
-            if df is None or df.empty or len(df) < 2:
-                df, is_yearly = _fetch_direct('quarterly')
-
-            if df is None or df.empty:
-                raise ValueError("Không tìm thấy dữ liệu cơ bản")
-
-
-
-            # ── Normalize column names ──
-            col_map = {c.lower().replace(' ', '').replace('_', '').replace('/', ''): c
-                       for c in df.columns}
-
-            def _col(*keys):
-                for k in keys:
-                    if k.lower().replace('_', '') in col_map:
-                        return col_map[k.lower().replace('_', '')]
-                return None
-
-            eps_col = _col('earningPerShare', 'eps', 'epsbasic', 'EPS')
-            pe_col  = _col('priceToEarning', 'pe', 'priceearning', 'PE')
-            pb_col  = _col('priceToBook', 'pb', 'pricebook', 'PB')
-            roe_col = _col('roe', 'ROE')
-            # vnstock 0.2.x có netProfitChange, epsChange; vnstock3 có netProfitGrowth
-            yoy_col = _col('netProfitChange', 'epsChange', 'netProfitGrowth',
-                           'profitAfterTaxGrowth', 'postTaxProfitGrowth')
-            print(f"[{symbol}] eps_col={eps_col}, yoy_col={yoy_col}, is_yearly={is_yearly}")
-
-            latest = df.iloc[0]
-
-            def get_safe(val, default):
-                try:
-                    vf = float(val)
-                    return default if pd.isna(vf) else vf
+                    v = float(d)
+                    return default if pd.isna(v) else v
                 except:
                     return default
 
-            pe_actual  = get_safe(latest.get(pe_col),  0.0) if pe_col else 0.0
-            pb         = get_safe(latest.get(pb_col),  1.5) if pb_col else 1.5
-            roe        = get_safe(latest.get(roe_col), 0.15) if roe_col else 0.15
-            eps_actual = get_safe(latest.get(eps_col),  0.0) if eps_col else 0.0
-            # Normalize EPS: vnstock 0.2.x trả đơn vị nghìn đồng
-            if 0 < eps_actual < 50:
-                eps_actual *= 1000
+            # ── 1. Metrics hiện tại từ /tooltip ──
+            pe_actual   = 0.0
+            pb          = 1.5
+            roe         = 0.15
+            eps_actual  = 0.0
+            try:
+                r = requests.get(f'{BASE}/{symbol}/tooltip',
+                                 headers=_tcbs_headers, timeout=15)
+                print(f"[{symbol}] tooltip status={r.status_code}")
+                tdata = r.json()
+                # json_normalize để flat dict lồng nhau
+                from pandas import json_normalize as jnorm
+                td = jnorm(tdata)
+                print(f"[{symbol}] tooltip cols: {list(td.columns)[:20]}")
+                # Map cột linh hoạt
+                tc = {c.lower().replace('_','').replace('.','').replace(' ',''): c
+                      for c in td.columns}
+                def _tc(*keys):
+                    for k in keys:
+                        nk = k.lower().replace('_','').replace('.','').replace(' ','')
+                        if nk in tc: return tc[nk]
+                    return None
+                row = td.iloc[0]
+                pe_col  = _tc('priceToEarning','pe','pe0','priceearning','per')
+                pb_col  = _tc('priceToBook','pb','pb0','pricebook','pbr')
+                roe_col = _tc('roe','roe0')
+                eps_col = _tc('earningPerShare','eps','eps0','epsbasic')
+                pe_actual   = safe_get(row.get(pe_col),  0.0) if pe_col  else 0.0
+                pb          = safe_get(row.get(pb_col),  1.5) if pb_col  else 1.5
+                roe         = safe_get(row.get(roe_col), 0.15) if roe_col else 0.15
+                eps_actual  = safe_get(row.get(eps_col), 0.0) if eps_col  else 0.0
+                if 0 < eps_actual < 50:
+                    eps_actual *= 1000  # Normalize nghìn đồng → đồng
+                print(f"[{symbol}] tooltip → PE={pe_actual}, PB={pb}, ROE={roe}, EPS={eps_actual}")
+            except Exception as e:
+                print(f"[{symbol}] tooltip EXCEPTION: {e}")
 
-            # ── YoY LNST Growth ──
+            # ── 2. LNST multi-năm từ /incomestatement → tính YoY ──
             yoy_growth = 0.0
-            if yoy_col:
-                raw_chg = get_safe(latest.get(yoy_col), None)
-                print(f"[{symbol}] raw yoy_col={yoy_col} value={raw_chg}")
-                if raw_chg is not None and raw_chg != 0.0:
-                    # vnstock 0.2.x: decimal (0.25=25%) hoặc % (25=25%), normalize
-                    yoy_growth = raw_chg / 100 if abs(raw_chg) > 5 else raw_chg
-                    print(f"[{symbol}] YoY from col: {yoy_growth*100:.1f}%")
+            try:
+                r = requests.get(f'{BASE}/{symbol}/incomestatement',
+                                 params={'yearly': 1, 'isAll': 'true'},
+                                 headers=_tcbs_headers, timeout=20)
+                print(f"[{symbol}] incomestatement status={r.status_code}")
+                is_data = r.json()
+                if isinstance(is_data, list) and len(is_data) >= 2:
+                    is_df = pd.DataFrame(is_data)
+                    if 'year' in is_df.columns:
+                        is_df = is_df.sort_values('year', ascending=False).reset_index(drop=True)
+                    ic = {c.lower().replace('_','').replace(' ',''): c for c in is_df.columns}
+                    print(f"[{symbol}] incomestatement cols: {list(is_df.columns)[:15]}")
+                    lnst_col = None
+                    for k in ['posttaxprofit','netprofit','profit','afterTaxProfit','lnst']:
+                        if k.lower().replace('_','') in ic:
+                            lnst_col = ic[k.lower().replace('_','')]
+                            break
+                    if lnst_col:
+                        lnst_now  = safe_get(is_df.iloc[0][lnst_col], 0.0)
+                        lnst_prev = safe_get(is_df.iloc[1][lnst_col], 0.0)
+                        if lnst_prev != 0:
+                            yoy_growth = (lnst_now - lnst_prev) / abs(lnst_prev)
+                        print(f"[{symbol}] LNST now={lnst_now:.0f}, prev={lnst_prev:.0f}, YoY={yoy_growth*100:.1f}%")
+                    else:
+                        print(f"[{symbol}] LNST col not found in: {list(is_df.columns)}")
+                else:
+                    print(f"[{symbol}] incomestatement: not a list or < 2 rows. data={str(is_data)[:200]}")
 
-            # Fallback: tự tính từ EPS nếu không có cột growth trực tiếp
-            if yoy_growth == 0.0 and eps_col and len(df) >= 2:
-                # QUAN TRỌNG: yearly → so 1 năm trước (idx=1), quarterly → 4 quý (idx=4)
-                prev_idx = 1 if is_yearly else min(4, len(df) - 1)
-                eps_prev = get_safe(df.iloc[prev_idx].get(eps_col), 0.0)
-                if 0 < eps_prev < 50:
-                    eps_prev *= 1000
-                print(f"[{symbol}] EPS fallback: now={eps_actual:.0f}, prev(idx={prev_idx})={eps_prev:.0f}")
-                if eps_prev > 0 and eps_actual > 0:
-                    yoy_growth = (eps_actual - eps_prev) / eps_prev
-                    print(f"[{symbol}] YoY from EPS: {yoy_growth*100:.1f}%")
+                    # EPS fallback: so EPS từ 2 năm trong incomestatement nếu có
+                    if isinstance(is_data, list) and len(is_data) >= 2 and eps_actual > 0:
+                        is_df2 = pd.DataFrame(is_data)
+                        if 'year' in is_df2.columns:
+                            is_df2 = is_df2.sort_values('year', ascending=False).reset_index(drop=True)
+                        ic2 = {c.lower().replace('_','').replace(' ',''): c for c in is_df2.columns}
+                        eps2_col = ic2.get('earningspershare') or ic2.get('eps')
+                        if eps2_col:
+                            eps_prev = safe_get(is_df2.iloc[1][eps2_col], 0.0)
+                            if 0 < eps_prev < 50: eps_prev *= 1000
+                            if eps_prev > 0 and eps_actual > 0:
+                                yoy_growth = (eps_actual - eps_prev) / eps_prev
+            except Exception as e:
+                print(f"[{symbol}] incomestatement EXCEPTION: {e}")
 
             industry_pe = FundamentalService._get_industry_pe(symbol)
             pe_eval     = FundamentalService._pe_label(pe_actual if pe_actual > 0 else industry_pe, industry_pe)
