@@ -25,16 +25,24 @@ def _init_firebase():
     try:
         import firebase_admin
         from firebase_admin import credentials
-        cred_path = os.environ.get("FIREBASE_CREDENTIALS_PATH", "")
-        cred_json = os.environ.get("FIREBASE_CREDENTIALS_JSON", "")
-        if cred_json:
-            cred_data = json.loads(cred_json)
-            cred = credentials.Certificate(cred_data)
+
+        # Priority 1: Render Secret Files (khuyến nghị)
+        secret_path = "/etc/secrets/firebase-credentials.json"
+        # Priority 2: Env var FIREBASE_CREDENTIALS_JSON (JSON string)
+        cred_json   = os.environ.get("FIREBASE_CREDENTIALS_JSON", "")
+        # Priority 3: Custom path
+        cred_path   = os.environ.get("FIREBASE_CREDENTIALS_PATH", "")
+
+        if os.path.exists(secret_path):
+            cred = credentials.Certificate(secret_path)
+        elif cred_json:
+            cred = credentials.Certificate(json.loads(cred_json))
         elif cred_path and os.path.exists(cred_path):
             cred = credentials.Certificate(cred_path)
         else:
             logger.warning("[FCM] No Firebase credentials found. Push notifications disabled.")
             return None
+
         _fcm_app = firebase_admin.initialize_app(cred)
         logger.info("[FCM] Firebase initialized successfully.")
         return _fcm_app
