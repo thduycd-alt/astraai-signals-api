@@ -1,5 +1,6 @@
-from vnstock import financial_ratio
+from vnstock import financial_ratio, financial_flow
 import pandas as pd
+import requests
 
 class FundamentalService:
     """
@@ -105,30 +106,37 @@ class FundamentalService:
     @staticmethod
     def analyze(symbol: str, current_price: float = 0.0) -> dict:
         try:
-            # Lấy dữ liệu BCTC — thử yearly trước, quarterly nếu yearly < 2 hàng
-            def _fetch(period):
+            # ── Bypass broken financial_ratio (TCBS API changed 'year'/'quarter' format) ──
+            def _fetch_direct(period='yearly'):
                 try:
-                    r = financial_ratio(symbol, period, True)
-                    row_count = len(r) if r is not None else 0
-                    print(f"[{symbol}] _fetch({period}): {row_count} rows")
-                    return r
+                    x = 1 if period == 'yearly' else 0
+                    url = (f'https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance'
+                           f'/{symbol}/financialratio?yearly={x}&isAll=true')
+                    data = requests.get(url, timeout=20).json()
+                    if not isinstance(data, list) or len(data) == 0:
+                        print(f"[{symbol}] _fetch_direct({period}): empty response")
+                        return None, False
+                    # rows=periods, cols=indicators — DO NOT transpose
+                    df_raw = pd.DataFrame(data)
+                    df_raw = df_raw.dropna(axis=1, how='all')
+                    # Sort newest-first by year if available
+                    if 'year' in df_raw.columns:
+                        df_raw = df_raw.sort_values('year', ascending=False).reset_index(drop=True)
+                    print(f"[{symbol}] _fetch_direct({period}): {len(df_raw)} rows, "
+                          f"cols={list(df_raw.columns)[:10]}")
+                    return df_raw, period == 'yearly'
                 except Exception as e:
-                    print(f"[{symbol}] _fetch({period}) EXCEPTION: {e}")
-                    return None
+                    print(f"[{symbol}] _fetch_direct({period}) EXCEPTION: {e}")
+                    return None, False
 
-            df = _fetch('yearly')
-            is_yearly = df is not None and len(df) >= 2
-            if not is_yearly:
-                df_q = _fetch('quarterly')
-                if df_q is not None and len(df_q) >= 2:
-                    df = df_q
-                    is_yearly = False
+            df, is_yearly = _fetch_direct('yearly')
+            if df is None or df.empty or len(df) < 2:
+                df, is_yearly = _fetch_direct('quarterly')
 
             if df is None or df.empty:
                 raise ValueError("Không tìm thấy dữ liệu cơ bản")
 
-            # DEBUG: In tên columns để xem vnstock 0.2.x trả gì
-            print(f"[{symbol}] financial_ratio cols: {list(df.columns)[:20]}")
+
 
             # ── Normalize column names ──
             col_map = {c.lower().replace(' ', '').replace('_', '').replace('/', ''): c
