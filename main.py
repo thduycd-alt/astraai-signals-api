@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1 import analyze, intraday, chat, market, comments, alerts
+from services.notification_service import router as notifications_router
 
 app = FastAPI(
     title="AstraAI Signals API",
@@ -24,6 +25,7 @@ app.include_router(market.router, prefix="/api/v1/market", tags=["3. Market Over
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["4. Chatbot AI"])
 app.include_router(comments.router, prefix="/api/v1/comments", tags=["5. Social Comments"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["6. Shark Alerts"])
+app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["7. Push Notifications"])
 
 @app.get("/")
 async def root():
