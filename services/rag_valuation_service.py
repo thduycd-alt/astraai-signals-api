@@ -131,7 +131,7 @@ Bước 5: Fair Value = Forward EPS × P/E Mục Tiêu.
         mos_zones  = FundamentalService._build_mos_zones(fair_value, current_price)
 
         # Lấy extras từ cache nếu có
-        cached_now = RAGValuationService._cache.get(symbol, {})
+        cached_now = RAGValuationService._load_cache(symbol)
         extras     = cached_now.get('extras', {})
 
         return {
