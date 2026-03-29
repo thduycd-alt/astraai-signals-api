@@ -67,8 +67,8 @@ class FundamentalService:
             if current_price > 0 and fair_value > 0:
                 upside = ((fair_value - current_price) / current_price) * 100
                 
-            # Định giá tham khảo từ CTCK (Mock)
-            reference_price = current_price * random.uniform(0.9, 1.3) if current_price > 0 else fair_value * 1.1
+            # Định giá tham khảo từ CTCK (Giả định tĩnh thay vì Random để tránh thay đổi khi F5)
+            reference_price = current_price * 1.15 if current_price > 0 else fair_value * 1.1
 
             return {
                 "score": max(0, min(100, score)),
@@ -88,11 +88,10 @@ class FundamentalService:
             # Bat gon loi KeyError tu thu vien vnstock
             print(f"[{symbol}] Fundamental Analysis Warning: vnstock API failed ({e}). Fallback to Neutral.")
             
-            # Khởi tạo định giá giả định (fallback) cho biểu diễn nếu API lỗi
-            import random
-            fallback_fair = current_price * random.uniform(1.05, 1.25) if current_price > 0 else 20.0
+            # Khởi tạo định giá giả định (fallback) tĩnh nếu API lỗi (không dùng random)
+            fallback_fair = current_price * 1.15 if current_price > 0 else 20.0
             fallback_upside = ((fallback_fair - current_price) / current_price) * 100 if current_price > 0 else 15.0
-            fallback_ref = current_price * random.uniform(1.1, 1.4) if current_price > 0 else 25.0
+            fallback_ref = current_price * 1.2 if current_price > 0 else 25.0
             
             default_metrics["Fair_Value"] = round(fallback_fair, 2)
             default_metrics["Upside"] = round(fallback_upside, 2)

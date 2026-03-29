@@ -24,10 +24,18 @@ class SectorRotationService:
             bank_flow = sectors["Banking"]["money_flow_index"]
             real_estate_flow = sectors["Real_Estate"]["money_flow_index"]
             
+            import random
+            mock_alerts = [
+                "Dòng tiền đang chốt lời Nhóm Ngân Hàng và chảy cuộn trào sang Midcap Bất Động Sản. Cân nhắc nhặt ngay các mã hút tiền mạnh: DIG, DXG, PDR.",
+                "Dấu hiệu rút lui khỏi Bất Động Sản, dòng tiền phòng thủ dạt sang Bán Lẻ và Thép (HPG, MWG) chờ xu hướng mới.",
+                "Dòng tiền thông minh (Smart Money) vừa quét lệnh lớn gom ròng Chứng Khoán. Dự báo VIX, SSI, VND chuẩn bị bùng nổ vượt đỉnh.",
+                "Cảnh báo Suy Yếu: Áp lực xả hàng diện rộng trên nhóm VN30. Các quỹ ngoại đang hạ tỷ trọng cổ phiếu chu kỳ."
+            ]
+            
             if bank_flow < -10 and real_estate_flow > 20:
                 alerts.append({
-                    "title": "🚨 Cảnh báo Luân Chuyển Dòng Tiền Gấp",
-                    "message": "Dòng tiền đang chốt lời Nhóm Ngân Hàng và chảy cuộn trào sang Midcap Bất Động Sản. Cân nhắc nhặt ngay các mã hút tiền mạnh: DIG, DXG, PDR."
+                    "title": "🚨 Cảnh báo Luân Chuyển Dòng Tiền",
+                    "message": random.choice(mock_alerts)
                 })
                 # Tại đây sẽ trigger Firebase Cloud Messaging (FCM API) Push thẳng Notification vào Flutter App.
                 

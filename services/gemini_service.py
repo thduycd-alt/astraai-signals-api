@@ -91,11 +91,12 @@ Bạn là Tổng Tư Lệnh của AstraAI Signals V6.
 Dựa vào số liệu Tòa Cảnh (VNINDEX & Dòng Nhóm Ngành) sau đây:
 {json.dumps(data, ensure_ascii=False)}
 
-YÊU CẦU KHẮC NGHIỆT (DƯỚI 50 TỪ):
-Viết đúng 1 đoạn văn siêu ngắn gọn, đi thẳng vào kết luận. Lựa lời văn sắc bén, lạnh lùng của dân Trading.
-1. VNINDEX hiện tại đang Tích lũy, FOMO hay Phân phối?
-2. Dòng tiền (Khối lượng) đang CHẢY MẠNH NHẤT MUA RÒNG vào Ngành nào (Dựa vào số dương cao nhất của sector_flow) và RÚT ĐÁY KHỎI Ngành nào?
-Tuyệt đối không giải thích dông dài. KHÔNG VIẾT DẠNG JSON. Viết dạng Text bình thường.
+YÊU CẦU PHÂN TÍCH (Khoảng 200 - 300 Từ):
+Viết 1 đoạn văn phân tích thật chi tiết, sâu sắc mang góc nhìn của Giám Đốc Phân Tích Định Lượng (Quant Director).
+1. VNINDEX hiện tại đang Tích lũy, FOMO hay Phân phối? Rủi ro hiện diện ở đâu?
+2. Phân tích chi tiết Dòng tiền (Khối lượng) đang CHẢY MẠNH NHẤT MUA RÒNG vào Ngành nào (Dựa vào số dương của sector_flow) và RÚT ĐÁY KHỎI Ngành nào?
+3. Nêu bật sự dịch chuyển (Rotation) giữa các cụm ngành và đánh giá đây là nhịp chốt lời cơ cấu hay là tháo chạy diện rộng.
+Tuyệt đối KHÔNG VIẾT JSON. Chỉ sử dụng ngôn từ chuyên gia sắc bén, cung cấp góc nhìn đa chiều.
         """
         try:
             return self.model.generate_content(prompt).text.strip()
