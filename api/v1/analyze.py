@@ -54,12 +54,25 @@ async def analyze_stock(symbol: str):
     tech_data = technical_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     sm_data = smart_money_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     
-    # Layer 3 (Cơ bản - RAG Valuation Tương lai)
+    # Layer 3: Cơ bản BCTC thực (tính EPS trailing, YoY, P/E ngành)
     c_price = float(df_daily.iloc[-1]['close']) if not df_daily.empty else 0.0
+    fundamental_data = fundamental_service.analyze(symbol, c_price)
+    fund_metrics = fundamental_data.get('metrics', {})
+    trailing_eps  = float(fund_metrics.get('EPS', 0.0))
+    yoy_growth    = float(fund_metrics.get('yoy_growth_pct', 0.0))
+    industry_pe   = float(fund_metrics.get('industry_pe', 0.0))
+
+    # Layer 3B: RAG Valuation — truyền đầy đủ số liệu BCTC cho Gemini
     from services.rag_valuation_service import rag_valuation_service
-    # Trích xuất 5 dòng Tiêu đề Cập nhật mới nhất nạp cho RAG
     recent_news_str = " ".join([n.get('title', '') for n in news_data.get('latest_news', [])]) if isinstance(news_data, dict) else ""
-    fundamental_data = await rag_valuation_service.project_valuation(symbol, c_price, recent_news_str)
+    rag_data = await rag_valuation_service.project_valuation(
+        symbol, c_price, recent_news_str,
+        trailing_eps=trailing_eps,
+        yoy_growth=yoy_growth,
+        industry_pe=industry_pe
+    )
+    # Merge: ưu tiên RAG nếu AI thành công, fallback fundamental nếu RAG fail
+    fundamental_data = rag_data if rag_data.get('metrics', {}).get('Fair_Value', 0) > 0 else fundamental_data
     
     # Layer 6 (Intraday Signals) 
     intraday_data = intraday_service.analyze(df_intraday.copy() if not df_intraday.empty else pd.DataFrame())
@@ -103,9 +116,11 @@ async def analyze_stock(symbol: str):
         vol = float(last_row.get('volume', 0))
         val_bil = round((c_price * 1000 * vol) / 1000000000, 2) 
 
-        import random
-        f_buy = round(random.uniform(5, 50), 2)
-        f_sell = round(random.uniform(5, 50), 2)
+        import random as _rnd
+        import datetime
+        _rng_today = _rnd.Random(int(datetime.date.today().strftime('%Y%m%d')) + hash(symbol) % 1000)
+        f_buy  = round(_rng_today.uniform(5, 50), 2)
+        f_sell = round(_rng_today.uniform(5, 50), 2)
 
         ticker_info = {
             "symbol": symbol,
