@@ -105,15 +105,38 @@ class FundamentalService:
     @staticmethod
     def analyze(symbol: str, current_price: float = 0.0) -> dict:
         try:
-            df = financial_ratio(symbol, 'yearly', True)
+            # Lấy dữ liệu BCTC — thử yearly trước, quarterly nếu yearly < 2 hàng
+            def _fetch(period):
+                try:
+                    return financial_ratio(symbol, period, True)
+                except:
+                    return None
+
+            df = _fetch('yearly')
+            if df is None or len(df) < 2:
+                df_q = _fetch('quarterly')
+                if df_q is not None and len(df_q) >= 2:
+                    df = df_q
 
             if df is None or df.empty:
                 raise ValueError("Không tìm thấy dữ liệu cơ bản")
 
-            if 'year' not in df.columns and 'quarter' not in df.columns:
-                raise KeyError("Dữ liệu BCTC từ vnstock không chứa cột thời gian chuẩn.")
+            # ── Normalize column names (vnstock khác phiên bản trả tên cột khác) ──
+            col_map = {c.lower().replace(' ', '').replace('_', '').replace('/', ''): c
+                       for c in df.columns}
 
-            latest = df.iloc[0]
+            def _col(*keys):
+                for k in keys:
+                    if k.lower().replace('_', '') in col_map:
+                        return col_map[k.lower().replace('_', '')]
+                return None
+
+            eps_col = _col('earningPerShare', 'eps', 'epsbasic')
+            pe_col  = _col('priceToEarning', 'pe', 'priceearning')
+            pb_col  = _col('priceToBook', 'pb', 'pricebook')
+            roe_col = _col('roe')
+
+            latest  = df.iloc[0]
 
             def get_safe(val, default):
                 try:
@@ -122,23 +145,26 @@ class FundamentalService:
                 except:
                     return default
 
-            pe_actual  = get_safe(latest.get('priceToEarning'), 0.0)
-            pb         = get_safe(latest.get('priceToBook'),    1.5)
-            roe        = get_safe(latest.get('roe'),            0.15)
-            eps_actual = get_safe(latest.get('earningPerShare'), 0.0)
+            pe_actual  = get_safe(latest.get(pe_col),  0.0) if pe_col else 0.0
+            pb         = get_safe(latest.get(pb_col),  1.5) if pb_col else 1.5
+            roe        = get_safe(latest.get(roe_col), 0.15) if roe_col else 0.15
+            eps_actual = get_safe(latest.get(eps_col),  0.0) if eps_col else 0.0
+            # Normalize EPS: vnstock đôi khi trả đơn vị nghìn đồng thay vì đồng
+            if 0 < eps_actual < 50:
+                eps_actual *= 1000
 
-            # Tốc độ tăng trưởng LNST YoY (so năm liền trước)
+            # YoY so kỳ liền trước
             yoy_growth = 0.0
-            if len(df) >= 2:
-                eps_prev = get_safe(df.iloc[1].get('earningPerShare'), 0.0)
+            if eps_col and len(df) >= 2:
+                eps_prev = get_safe(df.iloc[1].get(eps_col), 0.0)
+                if 0 < eps_prev < 50:
+                    eps_prev *= 1000
                 if eps_prev > 0 and eps_actual > 0:
                     yoy_growth = (eps_actual - eps_prev) / eps_prev
 
-            # P/E ngành làm chuẩn định giá
             industry_pe = FundamentalService._get_industry_pe(symbol)
             pe_eval     = FundamentalService._pe_label(pe_actual if pe_actual > 0 else industry_pe, industry_pe)
 
-            # Fair Value = EPS thực × P/E ngành (chuẩn Trường Money)
             if eps_actual > 0:
                 fair_value = FundamentalService._round_to_tick(eps_actual * industry_pe)
             else:
@@ -147,7 +173,6 @@ class FundamentalService:
             upside    = ((fair_value - current_price) / current_price) * 100 if current_price > 0 else 0
             mos_zones = FundamentalService._build_mos_zones(fair_value, current_price)
 
-            # Scoring cơ bản
             score = 50
             if 0 < pe_actual < industry_pe * 0.8: score += 15
             elif pe_actual > industry_pe * 1.3:    score -= 15
@@ -180,8 +205,6 @@ class FundamentalService:
 
         except Exception as e:
             print(f"[{symbol}] Fundamental fallback triggered: {e}")
-
-            # Proxy định giá khi không lấy được BCTC
             fallback_pe  = FundamentalService._get_industry_pe(symbol)
             fallback_eps = FundamentalService._get_default_eps(symbol, current_price)
             fair_value   = FundamentalService._round_to_tick(fallback_eps * fallback_pe)
@@ -207,5 +230,6 @@ class FundamentalService:
                 },
                 "status": "Proxy 🟡"
             }
+
 
 fundamental_service = FundamentalService()

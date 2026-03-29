@@ -1,26 +1,47 @@
-import json
+import json, os, time
 from services.gemini_service import gemini_service
 from services.fundamental_service import FundamentalService
 
+_CACHE_DIR = "/tmp"  # Persist within Render instance
+
 class RAGValuationService:
     """
-    V6.2 — Hệ thống Định Giá Tầm Soát AI (Forward EPS & P/E RAG Engine)
-    Phương pháp Trường Money — đầy đủ 5 bước:
-      1. EPS Trailing thực từ BCTC
-      2. Tốc độ tăng trưởng LNST (YoY, kế hoạch ĐHCĐ)
-      3. Forward EPS = EPS Trailing × (1 + Growth)
-      4. P/E mục tiêu ngành (điều chỉnh theo vĩ mô)
-      5. Fair Value + Margin of Safety Zones
+    V6.3 — Hệ thống Định Giá Tầm Soát AI (Forward EPS & P/E RAG Engine)
+    Dùng file-based cache (/tmp) thay vì in-memory để tránh mất kết quả khi Render khởi động lại.
     Cache 6h theo symbol.
     """
 
-    _cache = {}
+    @staticmethod
+    def _cache_path(symbol: str) -> str:
+        return os.path.join(_CACHE_DIR, f"rag_cache_{symbol}.json")
+
+    @staticmethod
+    def _load_cache(symbol: str) -> dict:
+        try:
+            path = RAGValuationService._cache_path(symbol)
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    data = json.load(f)
+                if time.time() - data.get('time', 0) < 21600:  # 6h
+                    return data
+        except:
+            pass
+        return {}
+
+    @staticmethod
+    def _save_cache(symbol: str, data: dict):
+        try:
+            path = RAGValuationService._cache_path(symbol)
+            with open(path, 'w') as f:
+                json.dump(data, f)
+        except:
+            pass
+
 
     @staticmethod
     async def project_valuation(symbol: str, current_price: float, recent_news: str,
                                 trailing_eps: float = 0.0, yoy_growth: float = 0.0,
                                 industry_pe: float = 0.0) -> dict:
-        import time
         now = time.time()
 
         # Lấy fallback từ FundamentalService nếu chưa có
@@ -29,10 +50,10 @@ class RAGValuationService:
         if trailing_eps <= 0:
             trailing_eps = FundamentalService._get_default_eps(symbol, current_price)
 
-        cached = RAGValuationService._cache.get(symbol)
-        if cached and (now - cached['time'] < 21600):
-            eps     = cached['eps']
-            pe      = cached['pe']
+        cached = RAGValuationService._load_cache(symbol)
+        if cached:
+            eps       = cached['eps']
+            pe        = cached['pe']
             reasoning = cached['reasoning']
         else:
             # Prompt đầy đủ — Gemini có đủ số liệu để tầm soát thực sự
@@ -95,10 +116,10 @@ Bước 5: Fair Value = Forward EPS × P/E Mục Tiêu.
                     "pe_reasoning":            data.get("pe_reasoning", ""),
                 }
 
-                RAGValuationService._cache[symbol] = {
+                RAGValuationService._save_cache(symbol, {
                     'time': now, 'eps': eps, 'pe': pe,
                     'reasoning': reasoning, 'extras': ai_extras
-                }
+                })
             except Exception as e:
                 print(f"[{symbol}] RAG Valuation AI error: {e}")
                 reasoning = f"AI tạm thời không khả dụng. Dùng EPS trailing {trailing_eps:,.0f} × P/E ngành {industry_pe:.1f}x."

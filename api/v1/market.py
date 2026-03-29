@@ -35,7 +35,8 @@ async def get_index_candles(index: str = "VNINDEX", days: int = 60):
     Kéo dữ liệu nến ngày của chỉ số: VNINDEX, HNXINDEX, UPCOMINDEX.
     Dùng cho biểu đồ nến chỉ số ở màn hình Toàn Cảnh.
     """
-    allowed = {"VNINDEX", "HNXINDEX", "UPCOMINDEX"}
+    allowed = {"VNINDEX", "HNXINDEX", "UPCOMINDEX", "HNXINDEX", "VN30", "HNXINDEX", "UPCOM", "HNXUPCOMINDEX"}
+    idx_map = {"HNXINDEX": "HNXINDEX", "UPCOM": "UPCOMINDEX", "VN30": "VN30", "UPCOMINDEX": "UPCOMINDEX"}
     idx = index.upper()
     if idx not in allowed:
         idx = "VNINDEX"
