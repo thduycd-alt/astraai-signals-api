@@ -108,8 +108,12 @@ class FundamentalService:
             # Lấy dữ liệu BCTC — thử yearly trước, quarterly nếu yearly < 2 hàng
             def _fetch(period):
                 try:
-                    return financial_ratio(symbol, period, True)
-                except:
+                    r = financial_ratio(symbol, period, True)
+                    row_count = len(r) if r is not None else 0
+                    print(f"[{symbol}] _fetch({period}): {row_count} rows")
+                    return r
+                except Exception as e:
+                    print(f"[{symbol}] _fetch({period}) EXCEPTION: {e}")
                     return None
 
             df = _fetch('yearly')
