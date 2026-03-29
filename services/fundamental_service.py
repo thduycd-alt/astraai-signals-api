@@ -131,10 +131,11 @@ class FundamentalService:
                         return col_map[k.lower().replace('_', '')]
                 return None
 
-            eps_col = _col('earningPerShare', 'eps', 'epsbasic')
-            pe_col  = _col('priceToEarning', 'pe', 'priceearning')
-            pb_col  = _col('priceToBook', 'pb', 'pricebook')
-            roe_col = _col('roe')
+            eps_col  = _col('earningPerShare', 'eps', 'epsbasic', 'EPS')
+            pe_col   = _col('priceToEarning', 'pe', 'priceearning', 'PE')
+            pb_col   = _col('priceToBook', 'pb', 'pricebook', 'PB')
+            roe_col  = _col('roe', 'ROE')
+            eps_chg_col = _col('epsChange', 'epschange')   # Cột thay đổi EPS YoY trực tiếp
 
             latest  = df.iloc[0]
 
@@ -153,10 +154,42 @@ class FundamentalService:
             if 0 < eps_actual < 50:
                 eps_actual *= 1000
 
-            # YoY so kỳ liền trước
+            # ── YoY Growth: ưu tiên epsChange trực tiếp, fallback tự tính ──
             yoy_growth = 0.0
-            if eps_col and len(df) >= 2:
-                eps_prev = get_safe(df.iloc[1].get(eps_col), 0.0)
+            if eps_chg_col:
+                # vnstock trả trực tiếp % thay đổi YoY (dạng 0.25 = 25%)
+                raw_chg = get_safe(latest.get(eps_chg_col), None)
+                if raw_chg is not None:
+                    # Normalize: nếu > 5 thì đang là %, chia 100
+                    yoy_growth = raw_chg / 100 if abs(raw_chg) > 5 else raw_chg
+
+            if yoy_growth == 0.0:
+                # Tự tính từ income_statement LNST thực (chính xác nhất)
+                try:
+                    from vnstock import income_statement as _is
+                    is_df = _is(symbol, 'yearly', True)
+                    if is_df is not None and len(is_df) >= 2:
+                        # Tìm cột LNST (postTaxProfit / netProfit)
+                        is_col_map = {c.lower().replace(' ','').replace('_','').replace('/','').replace('-',''): c
+                                      for c in is_df.columns}
+                        lnst_key = None
+                        for k in ['postTaxProfit','netProfit','lnst','netincome','aftertaxprofit']:
+                            if k in is_col_map:
+                                lnst_key = is_col_map[k]
+                                break
+                        if lnst_key:
+                            lnst_now  = get_safe(is_df.iloc[0].get(lnst_key), 0.0)
+                            lnst_prev = get_safe(is_df.iloc[1].get(lnst_key), 0.0)
+                            if lnst_prev > 0 and lnst_now > 0:
+                                yoy_growth = (lnst_now - lnst_prev) / lnst_prev
+                except Exception as ye:
+                    print(f"[{symbol}] income_statement YoY error: {ye}")
+
+            if yoy_growth == 0.0 and eps_col and len(df) >= 2:
+                # Fallback: tính từ EPS financial_ratio
+                # Với quarterly: so cùng kỳ năm trước (4 quý trước), không so quý liền kề
+                prev_idx = min(4, len(df) - 1)   # 4 quý trước = cùng kỳ năm trước
+                eps_prev = get_safe(df.iloc[prev_idx].get(eps_col), 0.0)
                 if 0 < eps_prev < 50:
                     eps_prev *= 1000
                 if eps_prev > 0 and eps_actual > 0:
