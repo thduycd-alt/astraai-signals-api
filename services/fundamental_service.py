@@ -135,7 +135,9 @@ class FundamentalService:
             pe_col   = _col('priceToEarning', 'pe', 'priceearning', 'PE')
             pb_col   = _col('priceToBook', 'pb', 'pricebook', 'PB')
             roe_col  = _col('roe', 'ROE')
-            eps_chg_col = _col('epsChange', 'epschange')   # Cột thay đổi EPS YoY trực tiếp
+            # vnstock 0.2.x dùng netProfitGrowth, vnstock3 dùng epsChange
+            yoy_col  = _col('netProfitGrowth', 'netprofitgrowth', 'epsChange', 'epschange',
+                            'postTaxProfitGrowth', 'profitAfterTaxGrowth')
 
             latest  = df.iloc[0]
 
@@ -150,50 +152,28 @@ class FundamentalService:
             pb         = get_safe(latest.get(pb_col),  1.5) if pb_col else 1.5
             roe        = get_safe(latest.get(roe_col), 0.15) if roe_col else 0.15
             eps_actual = get_safe(latest.get(eps_col),  0.0) if eps_col else 0.0
-            # Normalize EPS: vnstock đôi khi trả đơn vị nghìn đồng thay vì đồng
+            # Normalize EPS: vnstock 0.2.x trả đơn vị nghìn đồng
             if 0 < eps_actual < 50:
                 eps_actual *= 1000
 
-            # ── YoY Growth: ưu tiên epsChange trực tiếp, fallback tự tính ──
+            # ── YoY LNST Growth ──
             yoy_growth = 0.0
-            if eps_chg_col:
-                # vnstock trả trực tiếp % thay đổi YoY (dạng 0.25 = 25%)
-                raw_chg = get_safe(latest.get(eps_chg_col), None)
-                if raw_chg is not None:
-                    # Normalize: nếu > 5 thì đang là %, chia 100
+            if yoy_col:
+                raw_chg = get_safe(latest.get(yoy_col), None)
+                if raw_chg is not None and raw_chg != 0.0:
+                    # vnstock 0.2.x trả dạng decimal (0.25 = 25%), nếu > 5 thì là %
                     yoy_growth = raw_chg / 100 if abs(raw_chg) > 5 else raw_chg
+                    print(f"[{symbol}] YoY from {yoy_col}: raw={raw_chg} → {yoy_growth*100:.1f}%")
 
-            if yoy_growth == 0.0:
-                # Tự tính từ income_statement LNST thực (chính xác nhất)
-                try:
-                    from vnstock import income_statement as _is
-                    is_df = _is(symbol, 'yearly', True)
-                    if is_df is not None and len(is_df) >= 2:
-                        # Tìm cột LNST (postTaxProfit / netProfit)
-                        is_col_map = {c.lower().replace(' ','').replace('_','').replace('/','').replace('-',''): c
-                                      for c in is_df.columns}
-                        lnst_key = None
-                        for k in ['postTaxProfit','netProfit','lnst','netincome','aftertaxprofit']:
-                            if k in is_col_map:
-                                lnst_key = is_col_map[k]
-                                break
-                        if lnst_key:
-                            lnst_now  = get_safe(is_df.iloc[0].get(lnst_key), 0.0)
-                            lnst_prev = get_safe(is_df.iloc[1].get(lnst_key), 0.0)
-                            if lnst_prev > 0 and lnst_now > 0:
-                                yoy_growth = (lnst_now - lnst_prev) / lnst_prev
-                except Exception as ye:
-                    print(f"[{symbol}] income_statement YoY error: {ye}")
-
+            # Fallback: tự tính từ EPS nếu không có cột growth trực tiếp
             if yoy_growth == 0.0 and eps_col and len(df) >= 2:
-                # Fallback: tính từ EPS financial_ratio
-                # Với quarterly: so cùng kỳ năm trước (4 quý trước), không so quý liền kề
-                prev_idx = min(4, len(df) - 1)   # 4 quý trước = cùng kỳ năm trước
+                prev_idx = min(4, len(df) - 1)  # yearly: 1 năm trước; quarterly: 4 quý trước
                 eps_prev = get_safe(df.iloc[prev_idx].get(eps_col), 0.0)
                 if 0 < eps_prev < 50:
                     eps_prev *= 1000
                 if eps_prev > 0 and eps_actual > 0:
                     yoy_growth = (eps_actual - eps_prev) / eps_prev
+                    print(f"[{symbol}] YoY from EPS: {yoy_growth*100:.1f}%")
 
             industry_pe = FundamentalService._get_industry_pe(symbol)
             pe_eval     = FundamentalService._pe_label(pe_actual if pe_actual > 0 else industry_pe, industry_pe)
