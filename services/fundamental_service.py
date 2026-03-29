@@ -119,67 +119,61 @@ class FundamentalService:
             eps_actual = 0.0
             yoy_growth = 0.0
 
-            # ── Primary: vnstock3 VCI source (server-friendly, no browser needed) ──
+            # ── VCI GraphQL: PE, PB, ROE, EPS, netProfitGrowth ──
+            # Gọi thẳng VCI endpoint — không cần vnstock library
+            _VCI_GQL = 'https://trading.vietcap.com.vn/data-mt/graphql'
+            _GQL_QUERY = """
+query Q($ticker: String!, $period: String!) {
+  CompanyFinancialRatio(ticker: $ticker, period: $period) {
+    ratio {
+      yearReport
+      netProfit
+      netProfitGrowth
+      roe
+      pe
+      pb
+      eps
+      epsTTM
+    }
+  }
+}
+"""
             try:
-                from vnstock3 import Vnstock as _Vn3
-                _stk = _Vn3().stock(symbol=symbol, source='VCI')
-
-                # ── 1. Financial ratios (PE, PB, ROE, EPS) ──
-                try:
-                    rdf = _stk.finance.ratio(period='yearly', lang='en')
-                    if rdf is not None and not rdf.empty:
-                        # Sort newest first
-                        rdf = rdf.sort_index(ascending=False)
-                        print(f"[{symbol}] vn3 ratio rows={len(rdf)}, cols={list(rdf.columns)[:12]}")
-                        rc = {c.lower().replace('_','').replace(' ',''): c for c in rdf.columns}
-                        def _rc(*keys):
-                            for k in keys:
-                                if k.lower().replace('_','').replace(' ','') in rc:
-                                    return rc[k.lower().replace('_','').replace(' ','')]
-                            return None
-                        row = rdf.iloc[0]
-                        _pe  = _rc('priceToEarning','pe','priceearning','p/e')
-                        _pb  = _rc('priceToBook','pb','pricebook','p/b')
-                        _roe = _rc('roe','returnonequity')
-                        _eps = _rc('earningPerShare','eps','earningpershare')
-                        if _pe  : pe_actual  = safe_get(row[_pe],  0.0)
-                        if _pb  : pb         = safe_get(row[_pb],  1.5)
-                        if _roe : roe        = safe_get(row[_roe], 0.15)
-                        if _eps :
-                            eps_actual = safe_get(row[_eps], 0.0)
-                            if 0 < eps_actual < 50: eps_actual *= 1000
-                        print(f"[{symbol}] ratio → PE={pe_actual}, PB={pb}, ROE={roe}, EPS={eps_actual}")
-                except Exception as re:
-                    print(f"[{symbol}] vn3 ratio EXCEPTION: {re}")
-
-                # ── 2. Income statement → YoY LNST ──
-                try:
-                    idf = _stk.finance.income_statement(period='yearly', lang='en')
-                    if idf is not None and len(idf) >= 2:
-                        idf = idf.sort_index(ascending=False)
-                        print(f"[{symbol}] vn3 income rows={len(idf)}, cols={list(idf.columns)[:15]}")
-                        ic = {c.lower().replace('_','').replace(' ',''): c for c in idf.columns}
-                        lnst_col = None
-                        for k in ['postTaxProfit','netProfit','profit','postTaxIncome',
-                                  'netIncome','parentNetProfit','netProfitAfterTax']:
-                            if k.lower().replace('_','') in ic:
-                                lnst_col = ic[k.lower().replace('_','')]
-                                break
-                        if lnst_col:
-                            lnst_now  = safe_get(idf.iloc[0][lnst_col], 0.0)
-                            lnst_prev = safe_get(idf.iloc[1][lnst_col], 0.0)
-                            if lnst_prev != 0:
-                                yoy_growth = (lnst_now - lnst_prev) / abs(lnst_prev)
-                            print(f"[{symbol}] LNST now={lnst_now:.0f}, prev={lnst_prev:.0f}, YoY={yoy_growth*100:.1f}%")
-                        else:
-                            print(f"[{symbol}] LNST col not found. Cols: {list(idf.columns)}")
-                    else:
-                        print(f"[{symbol}] vn3 income: empty or < 2 rows")
-                except Exception as ie:
-                    print(f"[{symbol}] vn3 income EXCEPTION: {ie}")
-
-            except Exception as vn3e:
-                print(f"[{symbol}] vnstock3 init EXCEPTION: {vn3e}")
+                resp = requests.post(
+                    _VCI_GQL,
+                    json={'query': _GQL_QUERY, 'variables': {'ticker': symbol, 'period': 'Y'}},
+                    headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+                    timeout=20
+                )
+                gql_data = resp.json()
+                print(f"[{symbol}] VCI GQL status={resp.status_code}")
+                ratio_list = gql_data.get('data', {}).get('CompanyFinancialRatio', {}).get('ratio', [])
+                print(f"[{symbol}] VCI ratio rows={len(ratio_list)}")
+                if ratio_list:
+                    # Sort newest-first by yearReport
+                    ratio_list.sort(key=lambda x: x.get('yearReport', 0), reverse=True)
+                    latest = ratio_list[0]
+                    print(f"[{symbol}] VCI latest: {latest}")
+                    pe_actual   = safe_get(latest.get('pe'),  0.0)
+                    pb          = safe_get(latest.get('pb'),  1.5)
+                    roe         = safe_get(latest.get('roe'), 0.15)
+                    eps_actual  = safe_get(latest.get('epsTTM') or latest.get('eps'), 0.0)
+                    if 0 < eps_actual < 50: eps_actual *= 1000  # nghìn đồng → đồng
+                    # netProfitGrowth từ VCI là decimal (0.25 = 25%) hoặc % (25 = 25%)
+                    raw_yoy = safe_get(latest.get('netProfitGrowth'), 0.0)
+                    if raw_yoy != 0.0:
+                        yoy_growth = raw_yoy / 100 if abs(raw_yoy) > 5 else raw_yoy
+                    # Fallback YoY nếu netProfitGrowth = 0: tính từ 2 năm LNST
+                    if yoy_growth == 0.0 and len(ratio_list) >= 2:
+                        lnst_now  = safe_get(ratio_list[0].get('netProfit'), 0.0)
+                        lnst_prev = safe_get(ratio_list[1].get('netProfit'), 0.0)
+                        if lnst_prev != 0:
+                            yoy_growth = (lnst_now - lnst_prev) / abs(lnst_prev)
+                    print(f"[{symbol}] PE={pe_actual}, PB={pb}, ROE={roe}, EPS={eps_actual}, YoY={yoy_growth*100:.1f}%")
+                else:
+                    print(f"[{symbol}] VCI ratio empty. full_resp={str(gql_data)[:300]}")
+            except Exception as gql_e:
+                print(f"[{symbol}] VCI GQL EXCEPTION: {gql_e}")
 
             industry_pe = FundamentalService._get_industry_pe(symbol)
             pe_eval     = FundamentalService._pe_label(pe_actual if pe_actual > 0 else industry_pe, industry_pe)
