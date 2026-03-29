@@ -53,9 +53,12 @@ async def analyze_stock(symbol: str):
     tech_data = technical_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     sm_data = smart_money_service.analyze(df_daily.copy() if not df_daily.empty else pd.DataFrame())
     
-    # Layer 3 (Cơ bản) - Cần c_price từ df_daily
+    # Layer 3 (Cơ bản - RAG Valuation Tương lai)
     c_price = float(df_daily.iloc[-1]['close']) if not df_daily.empty else 0.0
-    fundamental_data = fundamental_service.analyze(symbol, current_price=c_price)
+    from services.rag_valuation_service import rag_valuation_service
+    # Trích xuất 5 dòng Tiêu đề Cập nhật mới nhất nạp cho RAG
+    recent_news_str = " ".join([n.get('title', '') for n in news_data.get('latest_news', [])]) if isinstance(news_data, dict) else ""
+    fundamental_data = await rag_valuation_service.project_valuation(symbol, c_price, recent_news_str)
     
     # Layer 6 (Intraday Signals) 
     intraday_data = intraday_service.analyze(df_intraday.copy() if not df_intraday.empty else pd.DataFrame())

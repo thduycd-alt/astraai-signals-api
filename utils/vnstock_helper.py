@@ -39,7 +39,7 @@ class VnstockHelper:
         
         try:
             # Map timeframe sang tham số resolution của vnstock
-            resolution_map = {"1m": "1", "3m": "3", "5m": "5"}
+            resolution_map = {"1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30", "1H": "1H", "1D": "1D"}
             res = resolution_map.get(timeframe, "1")
             
             df = stock_historical_data(symbol, start_date, end_date, res, "stock")

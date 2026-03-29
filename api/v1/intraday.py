@@ -6,12 +6,17 @@ from utils.vnstock_helper import vnstock_client
 import math
 
 @router.get("/{symbol}")
-async def get_intraday_chart(symbol: str, timeframe: str = Query("1m", pattern="^(1m|3m|5m)$")):
+async def get_intraday_chart(symbol: str, timeframe: str = Query("1m", pattern="^(1m|3m|5m|15m|30m|1H|1D)$")):
     """
     Cung cấp dữ liệu Nến (OHLCV) Realtime từng phút cho Flutter Chart vẽ động (Live).
     """
     symbol = symbol.upper()
-    df = vnstock_client.get_intraday_data(symbol, timeframe, days_back=2)
+    days = 2
+    if timeframe in ["15m", "30m"]: days = 5
+    elif timeframe == "1H": days = 15
+    elif timeframe == "1D": days = 90
+    
+    df = vnstock_client.get_intraday_data(symbol, timeframe, days_back=days)
     
     if df.empty:
         return {"symbol": symbol, "status": "error", "message": "No intraday data", "data": []}
