@@ -51,6 +51,11 @@ class RAGValuationService:
             trailing_eps = FundamentalService._get_default_eps(symbol, current_price)
 
         cached = RAGValuationService._load_cache(symbol)
+        # Invalidate cache nếu yoy_growth thay đổi đáng kể (>2%) so với cached
+        cached_yoy = cached.get('yoy', None) if cached else None
+        if cached and cached_yoy is not None and abs(cached_yoy - yoy_growth) > 2.0:
+            print(f"[{symbol}] Cache invalidated: yoy changed {cached_yoy:.1f}% → {yoy_growth:.1f}%")
+            cached = None
         if cached:
             eps       = cached['eps']
             pe        = cached['pe']
@@ -118,6 +123,7 @@ Bước 5: Fair Value = Forward EPS × P/E Mục Tiêu.
 
                 RAGValuationService._save_cache(symbol, {
                     'time': now, 'eps': eps, 'pe': pe,
+                    'yoy': yoy_growth,
                     'reasoning': reasoning, 'extras': ai_extras
                 })
             except Exception as e:
