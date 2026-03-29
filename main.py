@@ -35,6 +35,46 @@ async def root():
         "docs": "/docs"
     }
 
+@app.get("/debug/financial/{symbol}")
+async def debug_financial(symbol: str):
+    """Debug endpoint: xem raw columns của financial_ratio và income_statement cho symbol."""
+    import traceback
+    result = {}
+    symbol = symbol.upper()
+
+    try:
+        from vnstock import financial_ratio
+        df = financial_ratio(symbol, 'yearly', True)
+        if df is not None and not df.empty:
+            result['fr_yearly_cols'] = list(df.columns)
+            result['fr_yearly_rows'] = df.head(2).to_dict(orient='records')
+        else:
+            result['fr_yearly_cols'] = []
+    except Exception as e:
+        result['fr_yearly_error'] = str(e)
+
+    try:
+        from vnstock import income_statement
+        is_df = income_statement(symbol, 'yearly', True)
+        if is_df is not None and not is_df.empty:
+            result['is_yearly_cols'] = list(is_df.columns)
+            result['is_yearly_rows'] = is_df.head(2).to_dict(orient='records')
+        else:
+            result['is_yearly_cols'] = []
+    except Exception as e:
+        result['is_yearly_error'] = str(e)
+
+    # Chạy fundamental_service để xem yoy_growth thực tế
+    try:
+        from services.fundamental_service import fundamental_service
+        data = fundamental_service.analyze(symbol, 16000)
+        result['yoy_growth_pct'] = data.get('metrics', {}).get('yoy_growth_pct', 'NOT_FOUND')
+        result['eps'] = data.get('metrics', {}).get('EPS', 'NOT_FOUND')
+    except Exception as e:
+        result['fundamental_error'] = str(e) + '\n' + traceback.format_exc()
+
+    return result
+
 if __name__ == "__main__":
     import uvicorn
     import os
