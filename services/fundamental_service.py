@@ -113,15 +113,20 @@ class FundamentalService:
                     return None
 
             df = _fetch('yearly')
-            if df is None or len(df) < 2:
+            is_yearly = df is not None and len(df) >= 2
+            if not is_yearly:
                 df_q = _fetch('quarterly')
                 if df_q is not None and len(df_q) >= 2:
                     df = df_q
+                    is_yearly = False
 
             if df is None or df.empty:
                 raise ValueError("Không tìm thấy dữ liệu cơ bản")
 
-            # ── Normalize column names (vnstock khác phiên bản trả tên cột khác) ──
+            # DEBUG: In tên columns để xem vnstock 0.2.x trả gì
+            print(f"[{symbol}] financial_ratio cols: {list(df.columns)[:20]}")
+
+            # ── Normalize column names ──
             col_map = {c.lower().replace(' ', '').replace('_', '').replace('/', ''): c
                        for c in df.columns}
 
@@ -131,15 +136,16 @@ class FundamentalService:
                         return col_map[k.lower().replace('_', '')]
                 return None
 
-            eps_col  = _col('earningPerShare', 'eps', 'epsbasic', 'EPS')
-            pe_col   = _col('priceToEarning', 'pe', 'priceearning', 'PE')
-            pb_col   = _col('priceToBook', 'pb', 'pricebook', 'PB')
-            roe_col  = _col('roe', 'ROE')
-            # vnstock 0.2.x dùng netProfitGrowth, vnstock3 dùng epsChange
-            yoy_col  = _col('netProfitGrowth', 'netprofitgrowth', 'epsChange', 'epschange',
-                            'postTaxProfitGrowth', 'profitAfterTaxGrowth')
+            eps_col = _col('earningPerShare', 'eps', 'epsbasic', 'EPS')
+            pe_col  = _col('priceToEarning', 'pe', 'priceearning', 'PE')
+            pb_col  = _col('priceToBook', 'pb', 'pricebook', 'PB')
+            roe_col = _col('roe', 'ROE')
+            # vnstock 0.2.x có netProfitChange, epsChange; vnstock3 có netProfitGrowth
+            yoy_col = _col('netProfitChange', 'epsChange', 'netProfitGrowth',
+                           'profitAfterTaxGrowth', 'postTaxProfitGrowth')
+            print(f"[{symbol}] eps_col={eps_col}, yoy_col={yoy_col}, is_yearly={is_yearly}")
 
-            latest  = df.iloc[0]
+            latest = df.iloc[0]
 
             def get_safe(val, default):
                 try:
@@ -160,17 +166,20 @@ class FundamentalService:
             yoy_growth = 0.0
             if yoy_col:
                 raw_chg = get_safe(latest.get(yoy_col), None)
+                print(f"[{symbol}] raw yoy_col={yoy_col} value={raw_chg}")
                 if raw_chg is not None and raw_chg != 0.0:
-                    # vnstock 0.2.x trả dạng decimal (0.25 = 25%), nếu > 5 thì là %
+                    # vnstock 0.2.x: decimal (0.25=25%) hoặc % (25=25%), normalize
                     yoy_growth = raw_chg / 100 if abs(raw_chg) > 5 else raw_chg
-                    print(f"[{symbol}] YoY from {yoy_col}: raw={raw_chg} → {yoy_growth*100:.1f}%")
+                    print(f"[{symbol}] YoY from col: {yoy_growth*100:.1f}%")
 
             # Fallback: tự tính từ EPS nếu không có cột growth trực tiếp
             if yoy_growth == 0.0 and eps_col and len(df) >= 2:
-                prev_idx = min(4, len(df) - 1)  # yearly: 1 năm trước; quarterly: 4 quý trước
+                # QUAN TRỌNG: yearly → so 1 năm trước (idx=1), quarterly → 4 quý (idx=4)
+                prev_idx = 1 if is_yearly else min(4, len(df) - 1)
                 eps_prev = get_safe(df.iloc[prev_idx].get(eps_col), 0.0)
                 if 0 < eps_prev < 50:
                     eps_prev *= 1000
+                print(f"[{symbol}] EPS fallback: now={eps_actual:.0f}, prev(idx={prev_idx})={eps_prev:.0f}")
                 if eps_prev > 0 and eps_actual > 0:
                     yoy_growth = (eps_actual - eps_prev) / eps_prev
                     print(f"[{symbol}] YoY from EPS: {yoy_growth*100:.1f}%")
