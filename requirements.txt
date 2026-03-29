@@ -3,6 +3,7 @@ uvicorn
 pydantic
 pydantic-settings
 vnstock==0.2.8.5
+vnstock3
 pandas
 pandas-ta
 scipy

@@ -106,104 +106,80 @@ class FundamentalService:
     @staticmethod
     def analyze(symbol: str, current_price: float = 0.0) -> dict:
         try:
-            _tcbs_headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Referer': 'https://tcinvest.tcbs.com.vn/',
-                'DNT': '1',
-            }
-
-            BASE = 'https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance'
-
-            def safe_get(d, default):
+            def safe_get(v, default):
                 try:
-                    v = float(d)
-                    return default if pd.isna(v) else v
+                    f = float(v)
+                    return default if pd.isna(f) else f
                 except:
                     return default
 
-            # ── 1. Metrics hiện tại từ /tooltip ──
-            pe_actual   = 0.0
-            pb          = 1.5
-            roe         = 0.15
-            eps_actual  = 0.0
-            try:
-                r = requests.get(f'{BASE}/{symbol}/tooltip',
-                                 headers=_tcbs_headers, timeout=15)
-                print(f"[{symbol}] tooltip status={r.status_code}")
-                tdata = r.json()
-                # json_normalize để flat dict lồng nhau
-                from pandas import json_normalize as jnorm
-                td = jnorm(tdata)
-                print(f"[{symbol}] tooltip cols: {list(td.columns)[:20]}")
-                # Map cột linh hoạt
-                tc = {c.lower().replace('_','').replace('.','').replace(' ',''): c
-                      for c in td.columns}
-                def _tc(*keys):
-                    for k in keys:
-                        nk = k.lower().replace('_','').replace('.','').replace(' ','')
-                        if nk in tc: return tc[nk]
-                    return None
-                row = td.iloc[0]
-                pe_col  = _tc('priceToEarning','pe','pe0','priceearning','per')
-                pb_col  = _tc('priceToBook','pb','pb0','pricebook','pbr')
-                roe_col = _tc('roe','roe0')
-                eps_col = _tc('earningPerShare','eps','eps0','epsbasic')
-                pe_actual   = safe_get(row.get(pe_col),  0.0) if pe_col  else 0.0
-                pb          = safe_get(row.get(pb_col),  1.5) if pb_col  else 1.5
-                roe         = safe_get(row.get(roe_col), 0.15) if roe_col else 0.15
-                eps_actual  = safe_get(row.get(eps_col), 0.0) if eps_col  else 0.0
-                if 0 < eps_actual < 50:
-                    eps_actual *= 1000  # Normalize nghìn đồng → đồng
-                print(f"[{symbol}] tooltip → PE={pe_actual}, PB={pb}, ROE={roe}, EPS={eps_actual}")
-            except Exception as e:
-                print(f"[{symbol}] tooltip EXCEPTION: {e}")
-
-            # ── 2. LNST multi-năm từ /incomestatement → tính YoY ──
+            pe_actual  = 0.0
+            pb         = 1.5
+            roe        = 0.15
+            eps_actual = 0.0
             yoy_growth = 0.0
-            try:
-                r = requests.get(f'{BASE}/{symbol}/incomestatement',
-                                 params={'yearly': 1, 'isAll': 'true'},
-                                 headers=_tcbs_headers, timeout=20)
-                print(f"[{symbol}] incomestatement status={r.status_code}")
-                is_data = r.json()
-                if isinstance(is_data, list) and len(is_data) >= 2:
-                    is_df = pd.DataFrame(is_data)
-                    if 'year' in is_df.columns:
-                        is_df = is_df.sort_values('year', ascending=False).reset_index(drop=True)
-                    ic = {c.lower().replace('_','').replace(' ',''): c for c in is_df.columns}
-                    print(f"[{symbol}] incomestatement cols: {list(is_df.columns)[:15]}")
-                    lnst_col = None
-                    for k in ['posttaxprofit','netprofit','profit','afterTaxProfit','lnst']:
-                        if k.lower().replace('_','') in ic:
-                            lnst_col = ic[k.lower().replace('_','')]
-                            break
-                    if lnst_col:
-                        lnst_now  = safe_get(is_df.iloc[0][lnst_col], 0.0)
-                        lnst_prev = safe_get(is_df.iloc[1][lnst_col], 0.0)
-                        if lnst_prev != 0:
-                            yoy_growth = (lnst_now - lnst_prev) / abs(lnst_prev)
-                        print(f"[{symbol}] LNST now={lnst_now:.0f}, prev={lnst_prev:.0f}, YoY={yoy_growth*100:.1f}%")
-                    else:
-                        print(f"[{symbol}] LNST col not found in: {list(is_df.columns)}")
-                else:
-                    print(f"[{symbol}] incomestatement: not a list or < 2 rows. data={str(is_data)[:200]}")
 
-                    # EPS fallback: so EPS từ 2 năm trong incomestatement nếu có
-                    if isinstance(is_data, list) and len(is_data) >= 2 and eps_actual > 0:
-                        is_df2 = pd.DataFrame(is_data)
-                        if 'year' in is_df2.columns:
-                            is_df2 = is_df2.sort_values('year', ascending=False).reset_index(drop=True)
-                        ic2 = {c.lower().replace('_','').replace(' ',''): c for c in is_df2.columns}
-                        eps2_col = ic2.get('earningspershare') or ic2.get('eps')
-                        if eps2_col:
-                            eps_prev = safe_get(is_df2.iloc[1][eps2_col], 0.0)
-                            if 0 < eps_prev < 50: eps_prev *= 1000
-                            if eps_prev > 0 and eps_actual > 0:
-                                yoy_growth = (eps_actual - eps_prev) / eps_prev
-            except Exception as e:
-                print(f"[{symbol}] incomestatement EXCEPTION: {e}")
+            # ── Primary: vnstock3 VCI source (server-friendly, no browser needed) ──
+            try:
+                from vnstock3 import Vnstock as _Vn3
+                _stk = _Vn3().stock(symbol=symbol, source='VCI')
+
+                # ── 1. Financial ratios (PE, PB, ROE, EPS) ──
+                try:
+                    rdf = _stk.finance.ratio(period='yearly', lang='en')
+                    if rdf is not None and not rdf.empty:
+                        # Sort newest first
+                        rdf = rdf.sort_index(ascending=False)
+                        print(f"[{symbol}] vn3 ratio rows={len(rdf)}, cols={list(rdf.columns)[:12]}")
+                        rc = {c.lower().replace('_','').replace(' ',''): c for c in rdf.columns}
+                        def _rc(*keys):
+                            for k in keys:
+                                if k.lower().replace('_','').replace(' ','') in rc:
+                                    return rc[k.lower().replace('_','').replace(' ','')]
+                            return None
+                        row = rdf.iloc[0]
+                        _pe  = _rc('priceToEarning','pe','priceearning','p/e')
+                        _pb  = _rc('priceToBook','pb','pricebook','p/b')
+                        _roe = _rc('roe','returnonequity')
+                        _eps = _rc('earningPerShare','eps','earningpershare')
+                        if _pe  : pe_actual  = safe_get(row[_pe],  0.0)
+                        if _pb  : pb         = safe_get(row[_pb],  1.5)
+                        if _roe : roe        = safe_get(row[_roe], 0.15)
+                        if _eps :
+                            eps_actual = safe_get(row[_eps], 0.0)
+                            if 0 < eps_actual < 50: eps_actual *= 1000
+                        print(f"[{symbol}] ratio → PE={pe_actual}, PB={pb}, ROE={roe}, EPS={eps_actual}")
+                except Exception as re:
+                    print(f"[{symbol}] vn3 ratio EXCEPTION: {re}")
+
+                # ── 2. Income statement → YoY LNST ──
+                try:
+                    idf = _stk.finance.income_statement(period='yearly', lang='en')
+                    if idf is not None and len(idf) >= 2:
+                        idf = idf.sort_index(ascending=False)
+                        print(f"[{symbol}] vn3 income rows={len(idf)}, cols={list(idf.columns)[:15]}")
+                        ic = {c.lower().replace('_','').replace(' ',''): c for c in idf.columns}
+                        lnst_col = None
+                        for k in ['postTaxProfit','netProfit','profit','postTaxIncome',
+                                  'netIncome','parentNetProfit','netProfitAfterTax']:
+                            if k.lower().replace('_','') in ic:
+                                lnst_col = ic[k.lower().replace('_','')]
+                                break
+                        if lnst_col:
+                            lnst_now  = safe_get(idf.iloc[0][lnst_col], 0.0)
+                            lnst_prev = safe_get(idf.iloc[1][lnst_col], 0.0)
+                            if lnst_prev != 0:
+                                yoy_growth = (lnst_now - lnst_prev) / abs(lnst_prev)
+                            print(f"[{symbol}] LNST now={lnst_now:.0f}, prev={lnst_prev:.0f}, YoY={yoy_growth*100:.1f}%")
+                        else:
+                            print(f"[{symbol}] LNST col not found. Cols: {list(idf.columns)}")
+                    else:
+                        print(f"[{symbol}] vn3 income: empty or < 2 rows")
+                except Exception as ie:
+                    print(f"[{symbol}] vn3 income EXCEPTION: {ie}")
+
+            except Exception as vn3e:
+                print(f"[{symbol}] vnstock3 init EXCEPTION: {vn3e}")
 
             industry_pe = FundamentalService._get_industry_pe(symbol)
             pe_eval     = FundamentalService._pe_label(pe_actual if pe_actual > 0 else industry_pe, industry_pe)
