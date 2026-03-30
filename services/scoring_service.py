@@ -78,13 +78,17 @@ class ScoringService:
                     "hunting_zones": []
                 })
 
-                # Cập nhật Trực tiếp Text 6 Tầng Bằng Tiếng Việt Đậm Chất Chuyên Gia của Gemini
-                if "tech_text" in gemini_result: layers_data.get("technical", {})["expert_text"] = gemini_result["tech_text"]
-                if "sm_text" in gemini_result: layers_data.get("smart_money", {})["expert_text"] = gemini_result["sm_text"]
-                if "fundamental_text" in gemini_result: layers_data.get("fundamental", {})["expert_text"] = gemini_result["fundamental_text"]
-                if "macro_text" in gemini_result: layers_data.get("macro", {})["expert_text"] = gemini_result["macro_text"]
-                if "news_text" in gemini_result: layers_data.get("news_rumor", {})["expert_text"] = gemini_result["news_text"]
-                if "intraday_text" in gemini_result: layers_data.get("intraday", {})["expert_text"] = gemini_result["intraday_text"]
+                # Cập nhật Text 6 Tầng — CHỈ override nếu Gemini trả về nội dung có nghĩa
+                def _safe_set(layer_key, gemini_key):
+                    txt = gemini_result.get(gemini_key, "")
+                    if txt and str(txt).strip():  # chỉ ghi đè nếu không rỗng
+                        layers_data.get(layer_key, {})["expert_text"] = str(txt).strip()
+                _safe_set("technical",   "tech_text")
+                _safe_set("smart_money", "sm_text")
+                _safe_set("fundamental", "fundamental_text")
+                _safe_set("macro",       "macro_text")
+                _safe_set("news_rumor",  "news_text")
+                _safe_set("intraday",    "intraday_text")
 
             return final_payload
             
