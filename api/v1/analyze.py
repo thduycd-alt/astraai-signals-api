@@ -135,10 +135,10 @@ async def analyze_stock(symbol: str):
         # --- Chart Data ---
         chart_list = []
         if not df_daily.empty:
-            chart_df = df_daily.tail(60).reset_index()
-            for _, row in chart_df.iterrows():
+            chart_df = df_daily.tail(60)
+            for idx, row in chart_df.iterrows():
                 chart_list.append({
-                    "time":   str(row["time"])[:10],
+                    "time":   str(idx)[:10],
                     "open":   float(row["open"]),
                     "high":   float(row["high"]),
                     "low":    float(row["low"]),

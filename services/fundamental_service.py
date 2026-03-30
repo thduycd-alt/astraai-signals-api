@@ -122,6 +122,22 @@ class FundamentalService:
             # ── VCI GraphQL: PE, PB, ROE, EPS, netProfitGrowth ──
             # Gọi thẳng VCI endpoint — không cần vnstock library
             _VCI_GQL = 'https://trading.vietcap.com.vn/data-mt/graphql'
+            _VCI_HEADERS = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9,vi-VN;q=0.8,vi;q=0.7',
+                'Origin': 'https://trading.vietcap.com.vn',
+                'Referer': 'https://trading.vietcap.com.vn/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'sec-ch-ua': '"Google Chrome";v="120", "Chromium";v="120", "Not?A_Brand";v="24"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+            }
             _GQL_QUERY = """
 query Q($ticker: String!, $period: String!) {
   CompanyFinancialRatio(ticker: $ticker, period: $period) {
@@ -142,11 +158,14 @@ query Q($ticker: String!, $period: String!) {
                 resp = requests.post(
                     _VCI_GQL,
                     json={'query': _GQL_QUERY, 'variables': {'ticker': symbol, 'period': 'Y'}},
-                    headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+                    headers=_VCI_HEADERS,
                     timeout=20
                 )
-                gql_data = resp.json()
-                print(f"[{symbol}] VCI GQL status={resp.status_code}")
+                print(f"[{symbol}] VCI GQL status={resp.status_code} len={len(resp.text)}")
+                if not resp.text.strip():
+                    print(f"[{symbol}] VCI GQL empty body")
+                else:
+                    gql_data = resp.json()
                 ratio_list = gql_data.get('data', {}).get('CompanyFinancialRatio', {}).get('ratio', [])
                 print(f"[{symbol}] VCI ratio rows={len(ratio_list)}")
                 if ratio_list:
