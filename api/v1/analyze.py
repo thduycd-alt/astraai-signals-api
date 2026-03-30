@@ -102,6 +102,8 @@ async def analyze_stock(symbol: str):
         trailing_eps     = float(fund_metrics.get('EPS', 0.0))
         yoy_growth       = float(fund_metrics.get('yoy_growth_pct', 0.0))
         industry_pe      = float(fund_metrics.get('industry_pe', 0.0))
+        actual_pe        = float(fund_metrics.get('actual_pe', 0.0))
+        hist_avg_pe      = float(fund_metrics.get('hist_avg_pe', 0.0))
 
         # --- LAYER 3B: RAG Valuation ---
         from services.rag_valuation_service import rag_valuation_service
@@ -111,7 +113,9 @@ async def analyze_stock(symbol: str):
             symbol, c_price, recent_news_str,
             trailing_eps=trailing_eps,
             yoy_growth=yoy_growth,
-            industry_pe=industry_pe
+            industry_pe=industry_pe,
+            actual_pe=actual_pe,
+            hist_avg_pe=hist_avg_pe
         )
         fundamental_data = rag_data if rag_data.get('metrics', {}).get('Fair_Value', 0) > 0 \
             else fundamental_data

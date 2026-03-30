@@ -118,6 +118,7 @@ class FundamentalService:
             roe        = 0.15
             eps_actual = 0.0
             yoy_growth = 0.0
+            hist_avg_pe = 0.0
 
             # ── VCI GraphQL: PE, PB, ROE, EPS, netProfitGrowth ──
             # Gọi thẳng VCI endpoint — không cần vnstock library
@@ -189,7 +190,12 @@ query Q($ticker: String!, $period: String!) {
                         if lnst_prev != 0:
                             yoy_growth = (lnst_now - lnst_prev) / abs(lnst_prev)
                     print(f"[{symbol}] PE={pe_actual}, PB={pb}, ROE={roe}, EPS={eps_actual}, YoY={yoy_growth*100:.1f}%")
+                    # Lịch sử PE 5 năm gần nhất từ VCI
+                    pe_hist = [safe_get(x.get('pe'), 0.0) for x in ratio_list[:5] if safe_get(x.get('pe'), 0.0) > 0.1]
+                    hist_avg_pe = round(sum(pe_hist) / len(pe_hist), 2) if pe_hist else 0.0
+                    print(f"[{symbol}] Historical avg PE (5yr): {hist_avg_pe}")
                 else:
+                    hist_avg_pe = 0.0
                     print(f"[{symbol}] VCI ratio empty. full_resp={str(gql_data)[:300]}")
             except Exception as gql_e:
                 print(f"[{symbol}] VCI GQL EXCEPTION: {gql_e}")
@@ -231,6 +237,9 @@ query Q($ticker: String!, $period: String!) {
                     "pe_evaluation": pe_eval,
                     "yoy_growth_pct": round(yoy_growth * 100, 2),
                     "industry_pe":   industry_pe,
+                    "actual_pe":     round(pe_actual, 2),
+                    "hist_avg_pe":   round(hist_avg_pe, 2),
+                    "trailing_eps":  round(eps_actual, 2),
                 },
                 "status": "Healthy 🟢" if score >= 60 else ("Warning 🔴" if score < 40 else "Neutral 🟡")
             }

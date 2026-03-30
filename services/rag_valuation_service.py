@@ -41,7 +41,8 @@ class RAGValuationService:
     @staticmethod
     async def project_valuation(symbol: str, current_price: float, recent_news: str,
                                 trailing_eps: float = 0.0, yoy_growth: float = 0.0,
-                                industry_pe: float = 0.0) -> dict:
+                                industry_pe: float = 0.0, actual_pe: float = 0.0,
+                                hist_avg_pe: float = 0.0) -> dict:
         now = time.time()
 
         # Lấy fallback từ FundamentalService nếu chưa có
@@ -49,6 +50,19 @@ class RAGValuationService:
             industry_pe = FundamentalService._get_industry_pe(symbol)
         if trailing_eps <= 0:
             trailing_eps = FundamentalService._get_default_eps(symbol, current_price)
+
+        # === PE CEILING: neo PE mục tiêu vào giá trị thực tế ===
+        # Giới hạn tối đa = min(PE ngành, PE thực x 1.5)
+        # Tránh AI chọn PE = 24x khi thị trường đang định giá cổ phiếu tại PE = 9.63x
+        if actual_pe > 0.5:
+            raw_ceiling = min(industry_pe, actual_pe * 1.5)
+            pe_ceiling  = max(raw_ceiling, actual_pe)  # ít nhất bằng PE hiện tại
+        elif hist_avg_pe > 0.5:
+            pe_ceiling  = min(industry_pe, hist_avg_pe * 1.2)
+        else:
+            pe_ceiling  = industry_pe  # fallback khi không có dữ liệu
+        pe_ceiling = round(pe_ceiling, 1)
+        print(f"[{symbol}] RAG PE ceiling={pe_ceiling} (actual={actual_pe}, industry={industry_pe}, hist5yr={hist_avg_pe})")
 
         cached = RAGValuationService._load_cache(symbol)
         # Invalidate cache nếu yoy_growth thay đổi đáng kể (>2%) so với cached
@@ -77,8 +91,11 @@ Bạn là Chuyên gia Phân tích Cơ bản theo phương pháp "Tầm Soát C�
 Bước 1: Đánh giá chất lượng EPS Trailing ({trailing_eps:,.0f}) — có bền vững không, có yếu tố một lần không?
 Bước 2: Dự phóng tăng trưởng LNST 4 quý tới dựa trên: chu kỳ ngành, vĩ mô, kế hoạch ĐHCĐ (rút từ tin tức).
 Bước 3: Tính Forward EPS = EPS Trailing × (1 + Growth%). Kết quả cụ thể tới đồng.
-Bước 4: Lựa chọn P/E mục tiêu: Cơ sở từ P/E ngành ({industry_pe:.1f}x), điều chỉnh theo tốc độ tăng trưởng và rủi ro.
-         Quy tắc: Tăng trưởng >20% → P/E có thể cao hơn ngành. Rủi ro cao → giảm P/E biên an toàn.
+Bước 4: Lựa chọn P/E mục tiêu:
+         - P/E thị trường hiện tại: {actual_pe:.1f}x (giá thị trường / EPS TTM).
+         - P/E ngành: {industry_pe:.1f}x. P/E lịch sử TB 5 năm: {hist_avg_pe:.1f}x.
+         - GIỚI HẠN BẮT BUỘC: target_pe KHÔNG ĐƯỢC vượt {pe_ceiling:.1f}x (= min(PE ngành, PE thực×1.5)).
+         - Nếu tăng trưởng cao nhưng có rủi ro cao → dùng PE gần PE thực; nếu ổn định, tăng trưởng tốt → tiếp cận PE trần.
 Bước 5: Fair Value = Forward EPS × P/E Mục Tiêu.
 
 === YÊU CẦU ĐẦU RA (JSON THUẦN — KHÔNG CHÚ THÍCH BÊN NGOÀI) ===
@@ -109,8 +126,9 @@ Bước 5: Fair Value = Forward EPS × P/E Mục Tiêu.
                 target_pe   = float(data.get("target_pe",   industry_pe))
 
                 # Ràng buộc hallucination
-                if forward_eps <= 0:     forward_eps = trailing_eps
-                if target_pe   <= 0 or target_pe > 50: target_pe = industry_pe
+                if forward_eps <= 0:    forward_eps = trailing_eps
+                # Ràng buộc PE ceiling — không cho AI vượt
+                if target_pe <= 0 or target_pe > pe_ceiling: target_pe = pe_ceiling
 
                 eps       = forward_eps
                 pe        = target_pe
