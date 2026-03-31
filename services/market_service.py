@@ -1,7 +1,30 @@
 import pandas as pd
 from datetime import datetime, timedelta
-from vnstock import stock_historical_data
 import random as _random_module
+
+def _fetch_stock_data(symbol: str, start_date: str, end_date: str, resolution: str = '1D', type: str = 'stock') -> pd.DataFrame:
+    """Wrapper tương thích vnstock v2 và v3."""
+    # Thử v3 trước
+    try:
+        from vnstock import Vnstock
+        src = 'VCI' if type == 'index' else 'TCBS'
+        stock = Vnstock().stock(symbol=symbol, source=src)
+        df = stock.quote.history(start=start_date, end=end_date, interval=resolution)
+        if df is not None and not df.empty:
+            df.columns = [c.lower() for c in df.columns]
+            return df
+    except Exception:
+        pass
+    # Fallback v2
+    try:
+        from vnstock import stock_historical_data
+        df = _fetch_stock_data(symbol, start_date, end_date, resolution, type)
+        if df is not None and not df.empty:
+            return df
+    except Exception:
+        pass
+    return pd.DataFrame()
+
 
 # ── Danh sách 50+ mã đại diện cho Heatmap (chuẩn FireAnt) ─────────────────
 HEATMAP_UNIVERSE = [
@@ -90,7 +113,7 @@ class MarketService:
             group  = item["group"]
             weight = item["weight"]
             try:
-                df = stock_historical_data(symbol, start_date, end_date, '1D', 'stock')
+                df = _fetch_stock_data(symbol, start_date, end_date, '1D', 'stock')
                 if df is not None and not df.empty and len(df) >= 2:
                     close = float(df.iloc[-1]['close'])
                     prev  = float(df.iloc[-2]['close'])
@@ -119,7 +142,7 @@ class MarketService:
         try:
             end_date   = datetime.now().strftime('%Y-%m-%d')
             start_date = (datetime.now() - timedelta(days=days + 30)).strftime('%Y-%m-%d')
-            df = stock_historical_data(index_symbol, start_date, end_date, '1D', 'index')
+            df = _fetch_stock_data(index_symbol, start_date, end_date, '1D', 'index')
             if df is None or df.empty:
                 return []
             df = df.tail(days)
@@ -152,7 +175,7 @@ class MarketService:
             end_date   = datetime.now().strftime('%Y-%m-%d')
             start_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
             try:
-                df = stock_historical_data('VNINDEX', start_date, end_date, '1D', 'index')
+                df = _fetch_stock_data('VNINDEX', start_date, end_date, '1D', 'index')
                 if df is not None and not df.empty:
                     last_row = df.iloc[-1]
                     prev_row = df.iloc[-2] if len(df) > 1 else last_row
@@ -222,7 +245,7 @@ class MarketService:
         start_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
         for sym in symbols:
             try:
-                df = stock_historical_data(sym, start_date, end_date, '1D', 'stock')
+                df = _fetch_stock_data(sym, start_date, end_date, '1D', 'stock')
                 if df is not None and not df.empty:
                     last = df.iloc[-1]
                     prev = df.iloc[-2] if len(df) > 1 else last

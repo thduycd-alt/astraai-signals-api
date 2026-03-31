@@ -1,6 +1,15 @@
-from vnstock import financial_ratio, financial_flow
 import pandas as pd
 import requests
+
+def _call_vs_bctc(symbol: str) -> str:
+    """Lazy import vietstock BCTC to avoid module path issues with uvicorn."""
+    try:
+        from services.vietstock_bctc_service import get_bctc_for_ai
+        return get_bctc_for_ai(symbol)
+    except Exception as e:
+        print(f'[WARN] vietstock_bctc_service: {e}')
+        return ''
+
 
 class FundamentalService:
     """
@@ -35,6 +44,22 @@ class FundamentalService:
         if symbol in retail:      return 25.0
         if symbol in tech:        return 20.0
         return 15.0
+
+    @staticmethod
+    def _get_industry_pb(symbol: str) -> float:
+        banks       = ["VCB","BID","CTG","MBB","ACB","VPB","TCB","STB","HDB","VIB","TPB","SHB","EIB","MSB","OCB","SSB","LPB","NAB"]
+        securities  = ["SSI","VND","VCI","HCM","SHS","VIX","FTS","MBS","CTS","BSI","AGR"]
+        real_estate = ["VHM","VIC","NVL","KDH","DIG","DXG","PDR","NLG","CEO","HDG","CRE","SCR","TCH","KBC","HAG"]
+        steel       = ["HPG","HSG","NKG","SMC","TLH","VGS"]
+        retail      = ["MWG","PNJ","FRT","DGW","PET","VRE","MSN"]
+        tech        = ["FPT","CMG","ELC"]
+        if symbol in banks:       return 1.5
+        if symbol in securities:  return 1.8
+        if symbol in real_estate: return 1.5
+        if symbol in steel:       return 1.2
+        if symbol in retail:      return 2.5
+        if symbol in tech:        return 2.0
+        return 1.5
 
     @staticmethod
     def _pe_label(current_pe: float, industry_pe: float) -> str:
@@ -72,11 +97,23 @@ class FundamentalService:
         Biên an toàn tính từ Fair Value (= Forward EPS × P/E Ngành).
         """
         rt = FundamentalService._round_to_tick
-        buy_strong = rt(fair_value * 0.75)   # Mua Mạnh: -25%
-        buy_zone   = rt(fair_value * 0.85)   # Tích Lũy: -15%
-        hold_top   = rt(fair_value * 1.00)   # Fair Value
-        tp_zone    = rt(fair_value * 1.15)   # Chốt Lời: +15%
-        tp_strong  = rt(fair_value * 1.30)   # Chốt Mạnh: +30%
+        
+        # SMART MoS: Nếu giá thị trường đã rơi rất sâu (< 80% Fair Value),
+        # Neo vùng mua theo đồ thị Technical (Giá hiện tại) thay vì Fair Value
+        # Để tránh việc "giá 16k mà báo vùng mua mạnh 32k"
+        if current_price > 0.0 and current_price < fair_value * 0.80:
+            buy_strong = rt(current_price * 0.93)   # Mua Mạnh: Hỗ trợ đáy ngắn hạn (-7%)
+            buy_zone   = rt(current_price * 1.05)   # Tích Lũy: Gom quanh nền (+5%)
+            hold_top   = rt(fair_value * 0.90)      # Nắm Giữ: Canh target 1
+            tp_zone    = rt(fair_value * 1.00)      # Chốt Lời: Về Fair Value
+            tp_strong  = rt(fair_value * 1.15)      # Chốt Mạnh: Kéo thốc FOMO
+        else:
+            # Logic cơ bản: Chiết khấu từ Fair Value
+            buy_strong = rt(fair_value * 0.75)   # Mua Mạnh: -25%
+            buy_zone   = rt(fair_value * 0.85)   # Tích Lũy: -15%
+            hold_top   = rt(fair_value * 1.00)   # Fair Value
+            tp_zone    = rt(fair_value * 1.15)   # Chốt Lời: +15%
+            tp_strong  = rt(fair_value * 1.30)   # Chốt Mạnh: +30%
 
         # Xác định vị trí hiện tại
         p = current_price
@@ -144,17 +181,25 @@ query Q($ticker: String!, $period: String!) {
   CompanyFinancialRatio(ticker: $ticker, period: $period) {
     ratio {
       yearReport
+      revenue
+      ebit
+      grossMargin
+      ebitMargin
       netProfit
       netProfitGrowth
-      roe
-      pe
-      pb
       eps
       epsTTM
+      pe
+      pb
+      roe
+      roa
+      currentRatio
+      dividend
     }
   }
 }
 """
+            bctc_history = []  # Lịch sử 5 năm BCTC để Gemini phân tích xu hướng
             try:
                 resp = requests.post(
                     _VCI_GQL,
@@ -194,13 +239,77 @@ query Q($ticker: String!, $period: String!) {
                     pe_hist = [safe_get(x.get('pe'), 0.0) for x in ratio_list[:5] if safe_get(x.get('pe'), 0.0) > 0.1]
                     hist_avg_pe = round(sum(pe_hist) / len(pe_hist), 2) if pe_hist else 0.0
                     print(f"[{symbol}] Historical avg PE (5yr): {hist_avg_pe}")
+                    # Build BCTC history for Gemini trend analysis (up to 5 years)
+                    for row in ratio_list[:5]:
+                        bctc_history.append({
+                            'year':         row.get('yearReport'),
+                            'revenue_bn':   round(safe_get(row.get('revenue'), 0) / 1e9, 1),
+                            'ebit_bn':      round(safe_get(row.get('ebit'), 0) / 1e9, 1),
+                            'netProfit_bn': round(safe_get(row.get('netProfit'), 0) / 1e9, 1),
+                            'grossMargin':  round(safe_get(row.get('grossMargin'), 0) * 100, 1),
+                            'ebitMargin':   round(safe_get(row.get('ebitMargin'), 0) * 100, 1),
+                            'roe_pct':      round(safe_get(row.get('roe'), 0) * 100, 1),
+                            'roa_pct':      round(safe_get(row.get('roa'), 0) * 100, 1),
+                            'currentRatio': round(safe_get(row.get('currentRatio'), 0), 2),
+                            'eps':          round(safe_get(row.get('epsTTM') or row.get('eps'), 0), 0),
+                            'pe':           round(safe_get(row.get('pe'), 0), 1),
+                            'pb':           round(safe_get(row.get('pb'), 0), 2),
+                            'yoy_pct':      round(safe_get(row.get('netProfitGrowth'), 0) * 100, 1),
+                        })
                 else:
                     hist_avg_pe = 0.0
                     print(f"[{symbol}] VCI ratio empty. full_resp={str(gql_data)[:300]}")
             except Exception as gql_e:
                 print(f"[{symbol}] VCI GQL EXCEPTION: {gql_e}")
 
+            # ── Quarterly data: last 8 quarters for Gemini trend analysis ──
+            q_history = []
+            try:
+                _GQL_QUARTERLY = """
+query Q($ticker: String!, $period: String!) {
+  CompanyFinancialRatio(ticker: $ticker, period: $period) {
+    ratio {
+      yearReport
+      lengthReport
+      revenue
+      ebit
+      grossMargin
+      ebitMargin
+      netProfit
+      eps
+      roe
+      currentRatio
+    }
+  }
+}
+"""
+                resp_q = requests.post(
+                    _VCI_GQL,
+                    json={'query': _GQL_QUARTERLY, 'variables': {'ticker': symbol, 'period': 'Q'}},
+                    headers=_VCI_HEADERS,
+                    timeout=20
+                )
+                if resp_q.status_code == 200:
+                    q_data = resp_q.json()
+                    q_list = q_data.get('data', {}).get('CompanyFinancialRatio', {}).get('ratio', [])
+                    q_list.sort(key=lambda x: (x.get('yearReport', 0), x.get('lengthReport', 0)), reverse=True)
+                    for qrow in q_list[:8]:  # 8 quarters = 2 years
+                        q_history.append({
+                            'period':       f"Q{qrow.get('lengthReport')}/{qrow.get('yearReport')}",
+                            'revenue_bn':   round(safe_get(qrow.get('revenue'), 0) / 1e9, 1),
+                            'ebit_bn':      round(safe_get(qrow.get('ebit'), 0) / 1e9, 1),
+                            'netProfit_bn': round(safe_get(qrow.get('netProfit'), 0) / 1e9, 1),
+                            'grossMargin':  round(safe_get(qrow.get('grossMargin'), 0) * 100, 1),
+                            'ebitMargin':   round(safe_get(qrow.get('ebitMargin'), 0) * 100, 1),
+                            'eps_q':        round(safe_get(qrow.get('eps'), 0), 0),
+                        })
+                    print(f"[{symbol}] Quarterly data: {len(q_history)} quarters fetched")
+            except Exception as qe:
+                print(f"[{symbol}] Quarterly fetch error: {qe}")
+
             industry_pe = FundamentalService._get_industry_pe(symbol)
+            industry_pb = FundamentalService._get_industry_pb(symbol)
+            book_value_per_share = (eps_actual * pe_actual / pb) if pb > 0 else 0.0
             pe_eval     = FundamentalService._pe_label(pe_actual if pe_actual > 0 else industry_pe, industry_pe)
 
             if eps_actual > 0:
@@ -210,6 +319,9 @@ query Q($ticker: String!, $period: String!) {
 
             upside    = ((fair_value - current_price) / current_price) * 100 if current_price > 0 else 0
             mos_zones = FundamentalService._build_mos_zones(fair_value, current_price)
+
+            # Vietstock BCTC balance sheet detail (inventory, advance payments, debt)
+            bctc_vietstock = _call_vs_bctc(symbol)
 
             score = 50
             if 0 < pe_actual < industry_pe * 0.8: score += 15
@@ -240,6 +352,12 @@ query Q($ticker: String!, $period: String!) {
                     "actual_pe":     round(pe_actual, 2),
                     "hist_avg_pe":   round(hist_avg_pe, 2),
                     "trailing_eps":  round(eps_actual, 2),
+                    "pb_actual":     round(pb, 2),
+                    "industry_pb":   round(industry_pb, 2),
+                    "book_value_per_share": round(book_value_per_share, 2),
+                    "bctc_history":  bctc_history,
+                    "q_history":     q_history,
+                    "bctc_vietstock": bctc_vietstock,
                 },
                 "status": "Healthy 🟢" if score >= 60 else ("Warning 🔴" if score < 40 else "Neutral 🟡")
             }
@@ -268,6 +386,9 @@ query Q($ticker: String!, $period: String!) {
                     "pe_evaluation": pe_eval,
                     "yoy_growth_pct": 0.0,
                     "industry_pe":   fallback_pe,
+                    "pb_actual":     1.5,
+                    "industry_pb":   1.5,
+                    "book_value_per_share": 10000.0,
                 },
                 "status": "Proxy 🟡"
             }

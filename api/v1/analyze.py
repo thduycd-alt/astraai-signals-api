@@ -104,6 +104,8 @@ async def analyze_stock(symbol: str):
         industry_pe      = float(fund_metrics.get('industry_pe', 0.0))
         actual_pe        = float(fund_metrics.get('actual_pe', 0.0))
         hist_avg_pe      = float(fund_metrics.get('hist_avg_pe', 0.0))
+        pb_actual        = float(fund_metrics.get('pb_actual', 0.0))
+        book_value_per_share = float(fund_metrics.get('book_value_per_share', 0.0))
 
         # --- LAYER 3B: RAG Valuation ---
         from services.rag_valuation_service import rag_valuation_service
@@ -115,7 +117,9 @@ async def analyze_stock(symbol: str):
             yoy_growth=yoy_growth,
             industry_pe=industry_pe,
             actual_pe=actual_pe,
-            hist_avg_pe=hist_avg_pe
+            hist_avg_pe=hist_avg_pe,
+            pb_actual=pb_actual,
+            book_value_per_share=book_value_per_share
         )
         fundamental_data = rag_data if rag_data.get('metrics', {}).get('Fair_Value', 0) > 0 \
             else fundamental_data
@@ -133,8 +137,11 @@ async def analyze_stock(symbol: str):
             "news_rumor":  news_data,
             "intraday":    intraday_data
         }
+        # c_price đã được set ở trên (line 99), không reset lại ở đây
+
         final_result = await asyncio.to_thread(
-            scoring_service.calculate_final, symbol, layers_payload)
+            scoring_service.calculate_final, symbol, layers_payload, c_price)
+
 
         # --- Chart Data ---
         chart_list = []
@@ -155,7 +162,6 @@ async def analyze_stock(symbol: str):
         if not df_daily.empty:
             last_row = df_daily.iloc[-1]
             prev_row = df_daily.iloc[-2] if len(df_daily) > 1 else last_row
-            c_price  = float(last_row['close'])
             p_close  = float(prev_row['close'])
             change   = round(c_price - p_close, 2)
             pct      = round((change / p_close) * 100, 2) if p_close != 0 else 0
