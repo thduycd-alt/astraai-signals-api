@@ -104,9 +104,9 @@ class FundamentalService:
         if current_price > 0.0 and current_price < fair_value * 0.80:
             buy_strong = rt(current_price * 0.93)   # Mua Mạnh: Hỗ trợ đáy ngắn hạn (-7%)
             buy_zone   = rt(current_price * 1.05)   # Tích Lũy: Gom quanh nền (+5%)
-            hold_top   = rt(fair_value * 0.90)      # Nắm Giữ: Canh target 1
-            tp_zone    = rt(fair_value * 1.00)      # Chốt Lời: Về Fair Value
-            tp_strong  = rt(fair_value * 1.15)      # Chốt Mạnh: Kéo thốc FOMO
+            hold_top   = rt(fair_value * 1.00)      # Fair Value
+            tp_zone    = rt(fair_value * 1.15)      # Chốt Lời: +15% FV
+            tp_strong  = rt(fair_value * 1.30)      # Chốt Mạnh: +30% FV
         else:
             # Logic cơ bản: Chiết khấu từ Fair Value
             buy_strong = rt(fair_value * 0.75)   # Mua Mạnh: -25%
