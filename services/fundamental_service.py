@@ -133,7 +133,7 @@ class FundamentalService:
         return {
             "buy_strong":         buy_strong,
             "buy_zone":           buy_zone,
-            "fair_value":         hold_top,
+            "fair_value":         fair_value,   # Luôn là FV thực sự, không phải hold_top
             "tp_zone":            tp_zone,
             "tp_strong":          tp_strong,
             "current_zone_label": zone_label,
